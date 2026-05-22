@@ -1,0 +1,107 @@
+/* style.css - Responsive & Modern Design */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', 'Segoe UI', sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px; /* മൊബൈലിൽ സ്ക്രീനിൽ മുട്ടി നിൽക്കാതിരിക്കാൻ */
+}
+
+.login-container {
+    background-color: #ffffff;
+    padding: 40px 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.login-container:hover {
+    transform: translateY(-5px); /* ചെറിയൊരു ആനിമേഷൻ */
+}
+
+.login-container h2 {
+    color: #2c3e50;
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.login-container p {
+    color: #7f8c8d;
+    font-size: 14px;
+    margin-bottom: 30px;
+}
+
+.input-group {
+    position: relative;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s;
+    background-color: #fcfcfc;
+}
+
+.input-group input:focus {
+    border-color: #3498db;
+    background-color: #ffffff;
+}
+
+button {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(to right, #3498db, #2980b9);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+button:hover {
+    background: linear-gradient(to right, #2980b9, #2471a3);
+    box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+}
+
+#errorMessage {
+    margin-top: 15px;
+    font-size: 13px;
+    color: #e74c3c;
+    background-color: #fadbd8;
+    padding: 10px;
+    border-radius: 5px;
+    display: none; /* എറർ ഉള്ളപ്പോൾ മാത്രം കാണിക്കാൻ */
+}
+
+/* മൊബൈൽ സ്ക്രീനുകൾക്കുള്ള ഡിസൈൻ മാറ്റങ്ങൾ */
+@media (max-width: 480px) {
+    .login-container {
+        padding: 30px 20px;
+    }
+    
+    .login-container h2 {
+        font-size: 24px;
+    }
+}
