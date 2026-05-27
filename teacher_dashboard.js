@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, addDoc, getDocs, query, where, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, collection, addDoc, getDocs, query, where, deleteDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyDr5gIKnAdkiNrdLe2e3u1wOChFzeXlpCA",
@@ -15,7 +15,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Authentication & Session
 const userRole = localStorage.getItem('userRole');
 if (userRole !== 'teacher') {
     alert("Unauthorized Access!");
@@ -30,8 +29,8 @@ let teacherNameGlobal = "TEACHER";
 let classSubjects = [];
 let studentsMap = {};
 
-// UI Elements
 const displayMadrasaName = document.getElementById("displayMadrasaName");
+const displayClassName = document.getElementById("displayClassName");
 const logoutBtn = document.getElementById("logoutBtn");
 
 onAuthStateChanged(auth, async (user) => {
@@ -49,6 +48,13 @@ logoutBtn.addEventListener("click", () => {
     });
 });
 
+// Cache System Helper
+function clearCache(keyPrefix) {
+    Object.keys(localStorage).forEach(key => {
+        if(key.startsWith(keyPrefix)) localStorage.removeItem(key);
+    });
+}
+
 async function loadTeacherData() {
     try {
         const teacherDoc = await getDoc(doc(db, "users", teacherUid));
@@ -57,26 +63,24 @@ async function loadTeacherData() {
             assignedClass = tData.assignedClass;
             madrasaUid = tData.madrasaUid;
             teacherNameGlobal = tData.name;
+            classSubjects = tData.subjects || []; // Teacher manages their own subjects
             
+            displayClassName.textContent = assignedClass;
+            
+            // Get Madrasa Name
             const adminDoc = await getDoc(doc(db, "users", madrasaUid));
             if (adminDoc.exists()) {
                 madrasaNameGlobal = adminDoc.data().madrasaName || "MADRASA";
                 displayMadrasaName.textContent = madrasaNameGlobal;
-                
-                const subjectsObj = adminDoc.data().classSubjects || {};
-                classSubjects = subjectsObj[assignedClass] || [];
             }
             
+            renderSubjectsUI();
             await loadStudents();
-            renderSubjectInputs();
             loadResults();
         }
-    } catch (e) {
-        console.error("Error loading teacher data", e);
-    }
+    } catch (e) { console.error("Error loading teacher data", e); }
 }
 
-// --- TABS LOGIC ---
 function setupTabs() {
     document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
@@ -87,10 +91,54 @@ function setupTabs() {
             e.target.classList.add("active");
             document.getElementById(target).classList.add("active");
             
-            if(target === "tab-results") {
-                loadResults();
-            }
+            if(target === "tab-results") loadResults();
         });
+    });
+}
+
+// --- MANAGE SUBJECTS BY TEACHER ---
+document.getElementById("addSubjectBtn").addEventListener("click", async () => {
+    const newSub = document.getElementById("newSubjectName").value.trim();
+    if(!newSub) return;
+    if(classSubjects.includes(newSub)) return alert("Subject already exists!");
+    
+    classSubjects.push(newSub);
+    try {
+        await updateDoc(doc(db, "users", teacherUid), { subjects: classSubjects });
+        document.getElementById("newSubjectName").value = "";
+        renderSubjectsUI();
+        loadResults(); // Refresh table headers
+    } catch (e) { alert("Error adding subject"); }
+});
+
+window.deleteSubject = async (subName) => {
+    if(!confirm(`Delete subject: ${subName}?`)) return;
+    classSubjects = classSubjects.filter(s => s !== subName);
+    try {
+        await updateDoc(doc(db, "users", teacherUid), { subjects: classSubjects });
+        renderSubjectsUI();
+        loadResults();
+    } catch (e) { alert("Error deleting subject"); }
+};
+
+function renderSubjectsUI() {
+    // Tags
+    const tagsContainer = document.getElementById("subjectTagsContainer");
+    tagsContainer.innerHTML = "";
+    classSubjects.forEach(sub => {
+        tagsContainer.innerHTML += `<div class="subject-tag">${sub} <button class="delete-sub-btn" onclick="deleteSubject('${sub}')">X</button></div>`;
+    });
+    
+    // Inputs for Marks Entry
+    const inputsContainer = document.getElementById("dynamicSubjectInputs");
+    inputsContainer.innerHTML = classSubjects.length === 0 ? "<p>No subjects added. Add subjects above.</p>" : "";
+    classSubjects.forEach(sub => {
+        inputsContainer.innerHTML += `
+            <div class="form-group">
+                <label>${sub}</label>
+                <input type="text" class="form-control mark-input" data-subject="${sub}" placeholder="Mark or 'A'">
+            </div>
+        `;
     });
 }
 
@@ -107,173 +155,112 @@ addStudentBtn.addEventListener("click", async () => {
     addStudentBtn.textContent = "Adding...";
     try {
         await addDoc(collection(db, "students"), {
-            name, admissionNo, gender, parentPhone,
-            className: assignedClass, madrasaUid
+            name, admissionNo, gender, parentPhone, className: assignedClass, madrasaUid
         });
         document.getElementById("studentName").value = "";
         document.getElementById("admissionNo").value = "";
         document.getElementById("parentPhone").value = "";
+        clearCache(`cache_students_${assignedClass}`);
         await loadStudents();
-    } catch (e) {
-        console.error("Error adding student", e);
-    }
+    } catch (e) {}
     addStudentBtn.textContent = "Add Student";
 });
 
-const uploadStudentExcelBtn = document.getElementById("uploadStudentExcelBtn");
-uploadStudentExcelBtn.addEventListener("click", () => {
+document.getElementById("uploadStudentExcelBtn").addEventListener("click", () => {
     const file = document.getElementById("studentExcel").files[0];
-    if (!file) return alert("Please select an Excel file.");
-    
-    uploadStudentExcelBtn.textContent = "Uploading...";
+    if (!file) return alert("Select Excel file.");
+    document.getElementById("uploadStudentExcelBtn").textContent = "Uploading...";
     const reader = new FileReader();
     reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(sheet);
-            
-            let count = 0;
-            for (const row of json) {
-                const name = row.Name || row.name;
-                const adm = row.AdmissionNo || row.admissionno || row.Admissionno;
-                const gen = row.Gender || row.gender || "Male";
-                const phone = row.Phone || row.phone || "";
-                
-                if (name && adm) {
-                    await addDoc(collection(db, "students"), {
-                        name: String(name), admissionNo: String(adm), gender: String(gen), parentPhone: String(phone),
-                        className: assignedClass, madrasaUid
-                    });
-                    count++;
-                }
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        for (const row of json) {
+            const name = row.Name || row.name;
+            const adm = row.AdmissionNo || row.admissionno;
+            if (name && adm) {
+                await addDoc(collection(db, "students"), {
+                    name: String(name), admissionNo: String(adm), gender: String(row.Gender || "Male"), parentPhone: String(row.Phone || ""),
+                    className: assignedClass, madrasaUid
+                });
             }
-            alert(`Added ${count} students successfully.`);
-            document.getElementById("studentExcel").value = "";
-            await loadStudents();
-        } catch (err) {
-            console.error("Excel upload error", err);
-            alert("Error parsing Excel.");
         }
-        uploadStudentExcelBtn.textContent = "Upload Excel";
+        alert("Students Added.");
+        document.getElementById("studentExcel").value = "";
+        clearCache(`cache_students_${assignedClass}`);
+        await loadStudents();
+        document.getElementById("uploadStudentExcelBtn").textContent = "Upload Excel";
     };
     reader.readAsArrayBuffer(file);
 });
 
-// INDIVIDUAL STUDENT CASCADE DELETE
 window.deleteStudent = async (studentId) => {
     if (!confirm("Are you sure you want to delete this student and ALL associated marks?")) return;
     try {
-        // Delete student
         await deleteDoc(doc(db, "students", studentId));
+        const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", studentId)));
+        marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
         
-        // Query and delete all marks for this student
-        const marksQuery = query(collection(db, "marks"), where("studentId", "==", studentId));
-        const marksSnap = await getDocs(marksQuery);
-        
-        const deletePromises = marksSnap.docs.map(markDoc => deleteDoc(doc(db, "marks", markDoc.id)));
-        await Promise.all(deletePromises);
-        
-        alert("Student and all associated marks deleted successfully.");
+        clearCache(`cache_students_${assignedClass}`);
+        clearCache(`cache_marks_${assignedClass}`);
+        alert("Deleted.");
         await loadStudents();
-    } catch (e) {
-        console.error("Delete student error", e);
-        alert("Error deleting student.");
-    }
+    } catch (e) {}
 };
 
 document.getElementById("deleteAllStudentsBtn").addEventListener("click", async () => {
-    if (!confirm("Are you sure you want to delete ALL students for this class?")) return;
+    if (!confirm("Delete ALL students and marks?")) return;
     try {
-        const q = query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
-        const snap = await getDocs(q);
-        const deletePromises = snap.docs.map(docSnap => deleteDoc(doc(db, "students", docSnap.id)));
-        await Promise.all(deletePromises);
-        alert("All students deleted.");
+        const snap = await getDocs(query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass)));
+        snap.docs.forEach(async (d) => await deleteDoc(doc(db, "students", d.id)));
+        clearCache(`cache_students_${assignedClass}`);
+        clearCache(`cache_marks_${assignedClass}`);
         await loadStudents();
-    } catch (e) {
-        console.error("Delete all error", e);
-    }
+    } catch (e) {}
 });
 
 async function loadStudents() {
     if (!assignedClass || !madrasaUid) return;
-    
     const tbody = document.getElementById("studentsTableBody");
     const markSelect = document.getElementById("markStudentSelect");
     
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Loading...</td></tr>';
-    markSelect.innerHTML = '<option value="">-- Select Student --</option>';
-    studentsMap = {};
+    // Check Cache
+    const cacheKey = `cache_students_${assignedClass}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    let students = [];
     
-    try {
-        const q = query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
-        const snap = await getDocs(q);
-        
-        let students = [];
-        snap.forEach(doc => {
-            const data = doc.data();
-            students.push({ id: doc.id, ...data });
-            studentsMap[data.admissionNo] = { id: doc.id, ...data };
-        });
-        
-        students.sort((a, b) => {
-            if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
-            return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
-        });
-        
-        tbody.innerHTML = "";
-        if (students.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No students found</td></tr>';
-            return;
-        }
-        
-        students.forEach(st => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${st.admissionNo}</td>
-                    <td>${st.name}</td>
-                    <td>${st.gender}</td>
-                    <td>${st.parentPhone || "-"}</td>
-                    <td><button class="btn btn-danger btn-small btn-auto" onclick="deleteStudent('${st.id}')">Delete</button></td>
-                </tr>
-            `;
-            markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}" data-adm="${st.admissionNo}">${st.admissionNo} - ${st.name}</option>`;
-        });
-        
-    } catch (e) {
-        console.error("Load students error", e);
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Error loading</td></tr>';
+    if (cachedData) {
+        students = JSON.parse(cachedData);
+    } else {
+        const snap = await getDocs(query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass)));
+        snap.forEach(doc => students.push({ id: doc.id, ...doc.data() }));
+        localStorage.setItem(cacheKey, JSON.stringify(students));
     }
-}
 
-// --- TAB 2: ENTER MARKS ---
-function renderSubjectInputs() {
-    const container = document.getElementById("dynamicSubjectInputs");
-    container.innerHTML = "";
-    if (classSubjects.length === 0) {
-        container.innerHTML = "<p>No subjects assigned by admin.</p>";
-        return;
-    }
+    studentsMap = {};
+    students.forEach(s => studentsMap[s.admissionNo] = s);
     
-    classSubjects.forEach(sub => {
-        container.innerHTML += `
-            <div class="form-group">
-                <label>${sub}</label>
-                <input type="text" class="form-control mark-input" data-subject="${sub}" placeholder="Mark or 'A' for absent">
-            </div>
-        `;
+    students.sort((a, b) => {
+        if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
+        return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
+    });
+    
+    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="5" style="text-align: center;">No students</td></tr>' : "";
+    markSelect.innerHTML = '<option value="">-- Select Student --</option>';
+    
+    students.forEach(st => {
+        tbody.innerHTML += `<tr><td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td><td>${st.parentPhone || "-"}</td>
+            <td><button class="btn btn-danger btn-small btn-auto" onclick="deleteStudent('${st.id}')">Delete</button></td></tr>`;
+        markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}" data-adm="${st.admissionNo}">${st.admissionNo} - ${st.name}</option>`;
     });
 }
 
+// --- TAB 2: MARKS ---
 document.getElementById("markStudentSelect").addEventListener("change", async (e) => {
     const studentId = e.target.value;
     const term = document.getElementById("examTerm").value;
     if (!studentId || !term) return;
-    
-    const docId = `${studentId}_${term.replace(/\s+/g, '')}`;
-    const markDoc = await getDoc(doc(db, "marks", docId));
+    const markDoc = await getDoc(doc(db, "marks", `${studentId}_${term.replace(/\s+/g, '')}`));
     
     if (markDoc.exists()) {
         const data = markDoc.data();
@@ -293,346 +280,172 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
 document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     const select = document.getElementById("markStudentSelect");
     const studentId = select.value;
+    if (!studentId) return alert("Select a student");
+    
     const studentName = select.options[select.selectedIndex]?.getAttribute("data-name");
     const term = document.getElementById("examTerm").value;
-    const attendance = document.getElementById("attendanceInput").value.trim();
-    
     const globalMax = Number(document.getElementById("globalMaxMark").value) || 100;
     const globalPass = Number(document.getElementById("globalPassMark").value) || 35;
     
-    if (!studentId) return alert("Select a student");
-    
-    let marksData = {};
-    let totalObtained = 0;
-    let isPassed = true;
-    let valid = true;
+    let marksData = {}, totalObtained = 0, isPassed = true, valid = true;
     
     document.querySelectorAll(".mark-input").forEach(inp => {
         const sub = inp.getAttribute("data-subject");
         const val = inp.value.trim().toUpperCase();
-        
-        if (val === "") {
-            valid = false;
-        } else if (val === "A") {
-            marksData[sub] = "A";
-            isPassed = false;
-        } else {
+        if (val === "") valid = false;
+        else if (val === "A") { marksData[sub] = "A"; isPassed = false; }
+        else {
             const num = Number(val);
-            if (isNaN(num) || num > globalMax) {
-                alert(`Invalid mark for ${sub}`);
-                valid = false;
-            } else {
-                marksData[sub] = num;
-                totalObtained += num;
-                if (num < globalPass) isPassed = false;
-            }
+            if (isNaN(num) || num > globalMax) valid = false;
+            else { marksData[sub] = num; totalObtained += num; if (num < globalPass) isPassed = false; }
         }
     });
     
-    if (!valid) return;
+    if (!valid) return alert("Please check marks inputs.");
     
     const totalMaxPossible = classSubjects.length * globalMax;
     const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
-    const finalStatus = isPassed ? "Passed" : "Failed";
-    const grade = isPassed ? getGrade(percentage) : "Failed";
     
     document.getElementById("saveMarksBtn").textContent = "Saving...";
     try {
-        const docId = `${studentId}_${term.replace(/\s+/g, '')}`;
-        await setDoc(doc(db, "marks", docId), {
+        await setDoc(doc(db, "marks", `${studentId}_${term.replace(/\s+/g, '')}`), {
             studentId, studentName, madrasaUid, className: assignedClass, term,
-            marks: marksData, attendance, totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
-            passMark: globalPass, percentage, grade, status: finalStatus, updatedAt: new Date().toISOString()
+            marks: marksData, attendance: document.getElementById("attendanceInput").value, totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
+            passMark: globalPass, percentage, grade: isPassed ? "Passed" : "Failed", status: isPassed ? "Passed" : "Failed"
         });
-        alert(`Marks saved! Status: ${finalStatus}`);
-    } catch (e) {
-        console.error("Save mark error", e);
-    }
+        clearCache(`cache_marks_${assignedClass}`);
+        alert("Marks saved!");
+        select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
+    } catch (e) {}
     document.getElementById("saveMarksBtn").textContent = "Save Marks";
-    document.getElementById("markStudentSelect").value = "";
-    document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
 });
 
-function getGrade(percentage) {
-    if(percentage >= 90) return 'A+';
-    if(percentage >= 80) return 'A';
-    if(percentage >= 70) return 'B+';
-    if(percentage >= 60) return 'B';
-    if(percentage >= 50) return 'C+';
-    if(percentage >= 40) return 'C';
-    if(percentage >= 35) return 'D+';
-    return 'D';
-}
-
-const uploadMarksExcelBtn = document.getElementById("uploadMarksExcelBtn");
-uploadMarksExcelBtn.addEventListener("click", () => {
-    const file = document.getElementById("marksExcel").files[0];
-    const term = document.getElementById("examTerm").value;
-    const maxMark = Number(document.getElementById("globalMaxMark").value) || 100;
-    const passMark = Number(document.getElementById("globalPassMark").value) || 35;
-    
-    if (!file) return alert("Select an Excel file.");
-    
-    uploadMarksExcelBtn.textContent = "Uploading...";
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(sheet);
-            
-            let count = 0;
-            for (const row of json) {
-                const admKey = Object.keys(row).find(k => k.toLowerCase() === 'admissionno');
-                const attKey = Object.keys(row).find(k => k.toLowerCase() === 'attendance');
-                if (!admKey) continue;
-                
-                const student = studentsMap[String(row[admKey]).trim()];
-                if (!student) continue;
-                
-                let marksData = {};
-                let totalObtained = 0;
-                let isPassed = true;
-                let isValid = true;
-                
-                for (const sub of classSubjects) {
-                    const subKey = Object.keys(row).find(k => k.toLowerCase() === sub.toLowerCase());
-                    let val = subKey ? String(row[subKey]).trim().toUpperCase() : "0";
-                    
-                    if (val === "A") {
-                        marksData[sub] = "A";
-                        isPassed = false;
-                    } else {
-                        const num = Number(val);
-                        if (isNaN(num) || num > maxMark) { isValid = false; break; }
-                        marksData[sub] = num;
-                        totalObtained += num;
-                        if (num < passMark) isPassed = false;
-                    }
-                }
-                
-                if (!isValid) continue;
-                
-                const totalMaxPossible = classSubjects.length * maxMark;
-                const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
-                
-                const docId = `${student.id}_${term.replace(/\s+/g, '')}`;
-                await setDoc(doc(db, "marks", docId), {
-                    studentId: student.id, studentName: student.name, madrasaUid, className: assignedClass, term,
-                    marks: marksData, attendance: attKey ? String(row[attKey]).trim() : "",
-                    totalMarks: totalObtained, maxMarkTotal: totalMaxPossible, passMark: passMark,
-                    percentage, grade: isPassed ? getGrade(percentage) : "Failed", status: isPassed ? "Passed" : "Failed",
-                    updatedAt: new Date().toISOString()
-                });
-                count++;
-            }
-            alert(`Uploaded ${count} student marks.`);
-            document.getElementById("marksExcel").value = "";
-        } catch (err) {
-            console.error("Marks excel error", err);
-            alert("Error parsing excel.");
-        }
-        uploadMarksExcelBtn.textContent = "Upload Marks";
-    };
-    reader.readAsArrayBuffer(file);
-});
-
-// --- TAB 3: RESULTS & PDF ---
+// --- TAB 3: RESULTS ---
 document.getElementById("viewResultTerm").addEventListener("change", loadResults);
 
 async function loadResults() {
     const term = document.getElementById("viewResultTerm").value;
-    const screenHead = document.getElementById("screenResultHead");
-    const screenBody = document.getElementById("screenResultBody");
-    const pdfThead = document.getElementById("pdfThead");
-    const pdfTbody = document.getElementById("pdfTbody");
-    
     if (!assignedClass || !madrasaUid) return;
     
-    // Set headers - Column order strict rule
-    // Roll No, Ad.No, Name, Attendance (Hajar), [Dynamic Subjects], Total, Rank, Remarks/Status, Action (web only)
     let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Attendance</th>`;
     classSubjects.forEach(sub => ths += `<th>${sub}</th>`);
     ths += `<th>Total</th><th>Rank</th><th>Remarks/Status</th><th>Action</th></tr>`;
-    screenHead.innerHTML = ths;
+    document.getElementById("screenResultHead").innerHTML = ths;
     
-    // PDF Headers
     let pdfThs = `<tr>
         <th class="vertical-header"><span>ROLL NO</span></th>
         <th class="vertical-header"><span>AD.NO</span></th>
         <th class="name-col" style="vertical-align: middle;">NAME OF STUDENTS</th>
         <th class="vertical-header"><span>HAJAR</span></th>`;
     classSubjects.forEach(sub => pdfThs += `<th class="vertical-header"><span>${sub.toUpperCase()}</span></th>`);
-    pdfThs += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th>
-    </tr>`;
-    pdfThead.innerHTML = pdfThs;
+    pdfThs += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
+    document.getElementById("pdfThead").innerHTML = pdfThs;
     
     document.getElementById("pdfMadrasaName").textContent = madrasaNameGlobal;
     document.getElementById("pdfExamTitle").textContent = `EXAMINATION RESULT. CLASS: ${assignedClass.toUpperCase()}`;
     document.getElementById("pdfTeacherName").textContent = teacherNameGlobal;
     
-    screenBody.innerHTML = `<tr><td colspan="${9 + classSubjects.length}" style="text-align:center;">Loading...</td></tr>`;
+    // Check Cache for Marks
+    const cacheKey = `cache_marks_${assignedClass}_${term}`;
+    let results = [];
+    const cachedMarks = localStorage.getItem(cacheKey);
     
-    try {
-        const q = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term));
-        const snap = await getDocs(q);
-        
-        let results = [];
+    if(cachedMarks) {
+        results = JSON.parse(cachedMarks);
+    } else {
+        const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
         snap.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
-        
-        if (results.length === 0) {
-            screenBody.innerHTML = `<tr><td colspan="${9 + classSubjects.length}" style="text-align:center;">No results found</td></tr>`;
-            pdfTbody.innerHTML = "";
-            resetSummary();
-            return;
-        }
-        
-        // Ranking (Total Marks desc)
-        results.sort((a, b) => b.totalMarks - a.totalMarks);
-        let rank = 1;
-        results.forEach(r => {
-            if (r.status !== "Failed") r.rank = rank++;
-            else r.rank = "-";
-        });
-        
-        // Sorting for display (Male first, then Female, then by Ad.No)
-        results.sort((a, b) => {
-            const adA = Object.keys(studentsMap).find(k => studentsMap[k].id === a.studentId) || "";
-            const adB = Object.keys(studentsMap).find(k => studentsMap[k].id === b.studentId) || "";
-            const gA = studentsMap[adA]?.gender || "Male";
-            const gB = studentsMap[adB]?.gender || "Male";
-            
-            if (gA !== gB) return gA === "Male" ? -1 : 1;
-            return String(adA).localeCompare(String(adB), undefined, {numeric: true});
-        });
-        
-        screenBody.innerHTML = "";
-        pdfTbody.innerHTML = "";
-        
-        let bTot = 0, gTot = 0, bPass = 0, gPass = 0;
-        let boyRoll = 1, girlRoll = 1;
-        
-        results.forEach(res => {
-            const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === res.studentId) || "-";
-            const gen = studentsMap[adNo]?.gender || "Male";
-            
-            if (gen === "Male") { bTot++; if (res.status !== "Failed") bPass++; }
-            else { gTot++; if (res.status !== "Failed") gPass++; }
-            
-            const roll = gen === "Male" ? boyRoll++ : girlRoll++;
-            
-            // Rules
-            const isGirl = gen === "Female";
-            const prefixColor = isGirl ? "#d32f2f" : "#000000";
-            const normalColor = "#000000";
-            
-            // Marks & Status
-            let screenMarks = "";
-            let pdfMarks = "";
-            const passLimit = res.passMark || 35;
-            
-            classSubjects.forEach(sub => {
-                const mark = res.marks && res.marks[sub] !== undefined ? res.marks[sub] : "-";
-                const isFailMark = mark === "A" || (Number(mark) < passLimit && mark !== "-");
-                const markColor = isFailMark ? "#d32f2f" : "#000000";
-                
-                screenMarks += `<td style="color: ${markColor};">${mark}</td>`;
-                pdfMarks += `<td style="color: ${markColor};">${mark}</td>`;
-            });
-            
-            const screenStatusColor = res.status === "Failed" ? "red" : "black";
-            const remarksText = res.status !== "Failed" ? "P" : "F";
-            const remarksColor = res.status !== "Failed" ? "#000000" : "#d32f2f";
-            const actionBtnHtml = `<button class="btn btn-danger btn-small" onclick="deleteMark('${res.id}')">Delete</button>`;
-            
-            // Render Screen
-            screenBody.innerHTML += `
-                <tr>
-                    <td style="color: ${prefixColor};">${roll}</td>
-                    <td style="color: ${prefixColor};">${adNo}</td>
-                    <td style="color: ${prefixColor};">${res.studentName}</td>
-                    <td style="color: ${normalColor};">${res.attendance || "-"}</td>
-                    ${screenMarks}
-                    <td style="color: ${normalColor};">${res.totalMarks}</td>
-                    <td style="color: ${normalColor};">${res.rank}</td>
-                    <td style="color: ${screenStatusColor}; font-weight: bold;">${res.status}</td>
-                    <td>${actionBtnHtml}</td>
-                </tr>
-            `;
-            
-            // Render PDF
-            pdfTbody.innerHTML += `
-                <tr>
-                    <td style="color: ${prefixColor};">${roll}</td>
-                    <td style="color: ${prefixColor};">${adNo}</td>
-                    <td class="name-col" style="color: ${prefixColor};">${res.studentName.toUpperCase()}</td>
-                    <td style="color: ${normalColor};">${res.attendance || ""}</td>
-                    ${pdfMarks}
-                    <td style="color: ${normalColor};">${res.totalMarks}</td>
-                    <td style="color: ${normalColor};">${res.rank !== "-" ? res.rank : ""}</td>
-                    <td style="color: ${remarksColor}; font-weight: bold;">${remarksText}</td>
-                </tr>
-            `;
-        });
-        
-        // Summary tables
-        const pdfTotalRow = document.getElementById("pdfTotalRow");
-        const pdfPassedRow = document.getElementById("pdfPassedRow");
-        const pdfPercentageRow = document.getElementById("pdfPercentageRow");
-        
-        pdfTotalRow.innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
-        pdfPassedRow.innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
-        
-        const bPerc = bTot > 0 ? Math.round((bPass/bTot)*100) : 0;
-        const gPerc = gTot > 0 ? Math.round((gPass/gTot)*100) : 0;
-        const tPerc = (bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0;
-        
-        pdfPercentageRow.innerHTML = `<td style="color: black;">${bPerc}%</td><td style="color: #d32f2f;">${gPerc}%</td><td style="color: black;">${tPerc}%</td>`;
-        
-    } catch (e) {
-        console.error("Load results error", e);
+        localStorage.setItem(cacheKey, JSON.stringify(results));
     }
+
+    if (results.length === 0) {
+        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center;">No results</td></tr>`;
+        document.getElementById("pdfTbody").innerHTML = "";
+        return;
+    }
+    
+    results.sort((a, b) => b.totalMarks - a.totalMarks);
+    let rank = 1;
+    results.forEach(r => r.rank = r.status !== "Failed" ? rank++ : "-");
+    
+    results.sort((a, b) => {
+        const adA = Object.keys(studentsMap).find(k => studentsMap[k].id === a.studentId) || "";
+        const adB = Object.keys(studentsMap).find(k => studentsMap[k].id === b.studentId) || "";
+        const gA = studentsMap[adA]?.gender || "Male";
+        const gB = studentsMap[adB]?.gender || "Male";
+        if (gA !== gB) return gA === "Male" ? -1 : 1;
+        return String(adA).localeCompare(String(adB), undefined, {numeric: true});
+    });
+    
+    let sBody = "", pBody = "";
+    let bTot = 0, gTot = 0, bPass = 0, gPass = 0;
+    let boyRoll = 1, girlRoll = 1;
+    
+    results.forEach(res => {
+        const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === res.studentId) || "-";
+        const gen = studentsMap[adNo]?.gender || "Male";
+        
+        if (gen === "Male") { bTot++; if (res.status !== "Failed") bPass++; }
+        else { gTot++; if (res.status !== "Failed") gPass++; }
+        
+        const roll = gen === "Male" ? boyRoll++ : girlRoll++;
+        const color = gen === "Female" ? "#d32f2f" : "#000000";
+        
+        let marksHTML = "";
+        classSubjects.forEach(sub => {
+            const mark = res.marks && res.marks[sub] !== undefined ? res.marks[sub] : "-";
+            const mColor = mark === "A" || (Number(mark) < (res.passMark||35) && mark !== "-") ? "#d32f2f" : "#000000";
+            marksHTML += `<td style="color: ${mColor};">${mark}</td>`;
+        });
+        
+        sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
+            <td>${res.attendance || "-"}</td>${marksHTML}<td>${res.totalMarks}</td><td>${res.rank}</td>
+            <td style="color:${res.status === "Failed" ? "red" : "black"};">${res.status}</td>
+            <td><button class="btn btn-danger btn-small" onclick="deleteMark('${res.id}', '${term}')">Delete</button></td></tr>`;
+            
+        pBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
+            <td>${res.attendance || ""}</td>${marksHTML}<td>${res.totalMarks}</td><td>${res.rank !== "-" ? res.rank : ""}</td>
+            <td style="color:${res.status === "Failed" ? "#d32f2f" : "#000000"};">${res.status === "Failed" ? "F" : "P"}</td></tr>`;
+    });
+    
+    document.getElementById("screenResultBody").innerHTML = sBody;
+    document.getElementById("pdfTbody").innerHTML = pBody;
+    
+    document.getElementById("pdfTotalRow").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
+    document.getElementById("pdfPassedRow").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
+    document.getElementById("pdfPercentageRow").innerHTML = `<td style="color: black;">${bTot > 0 ? Math.round((bPass/bTot)*100) : 0}%</td><td style="color: #d32f2f;">${gTot > 0 ? Math.round((gPass/gTot)*100) : 0}%</td><td style="color: black;">${(bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0}%</td>`;
 }
 
-function resetSummary() {
-    document.getElementById("pdfTotalRow").innerHTML = `<td>0</td><td>0</td><td>0</td>`;
-    document.getElementById("pdfPassedRow").innerHTML = `<td>0</td><td>0</td><td>0</td>`;
-    document.getElementById("pdfPercentageRow").innerHTML = `<td>0%</td><td>0%</td><td>0%</td>`;
-}
-
-window.deleteMark = async (docId) => {
-    if(!confirm("Are you sure you want to delete this result?")) return;
-    try {
-        await deleteDoc(doc(db, "marks", docId));
-        loadResults();
-    } catch(e) {
-        console.error("Error deleting mark", e);
-    }
+window.deleteMark = async (docId, term) => {
+    if(!confirm("Delete this result?")) return;
+    await deleteDoc(doc(db, "marks", docId));
+    clearCache(`cache_marks_${assignedClass}`);
+    loadResults();
 };
 
-// --- EXACT PDF GENERATION RULES ---
 document.getElementById("downloadPdfBtn").addEventListener("click", () => {
     const area = document.getElementById("pdfExportArea");
-    const term = document.getElementById("viewResultTerm").value;
-    
-    // FIX BLANK/BLACK TOP ISSUE
     window.scrollTo(0, 0);
+    document.getElementById("pdfExportWrapper").style.left = "0";
     
-    html2canvas(area, { 
-        scale: 2, 
-        useCORS: true, 
-        backgroundColor: "#ffffff", 
-        scrollY: 0 
-    }).then(canvas => {
+    html2canvas(area, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => {
         const imgData = canvas.toDataURL("image/png");
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-        
-        // FIX IMAGE STRETCHING: Maintain perfect aspect ratio in jsPDF
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        const pdfHeight = pdf.internal.pageSize.getHeight();
         
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`${assignedClass}_${term}_Result.pdf`);
+        let imgWidth = pdfWidth;
+        let imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        // Auto Scale for many subjects
+        if (imgHeight > pdfHeight) {
+            imgHeight = pdfHeight - 10;
+            imgWidth = (canvas.width * imgHeight) / canvas.height;
+        }
+        
+        const xPos = (pdfWidth - imgWidth) / 2;
+        pdf.addImage(imgData, 'PNG', xPos, 5, imgWidth, imgHeight);
+        pdf.save(`${assignedClass}_Result.pdf`);
+        document.getElementById("pdfExportWrapper").style.left = "-9999px";
     });
 });

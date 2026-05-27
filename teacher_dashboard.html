@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Madrasa Teacher Dashboard</title>
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -25,371 +23,105 @@
             --red-alert: #d32f2f;
         }
 
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: inherit; }
 
-        *, *::before, *::after {
-            box-sizing: inherit;
-        }
+        .header { background-color: var(--primary-dark); color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-title { margin: 0; font-size: 22px; font-weight: 500; }
+        .logout-btn { background-color: var(--red-alert); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background-color 0.2s; }
+        .logout-btn:hover { background-color: #b71c1c; }
 
-        .header {
-            background-color: var(--primary-dark);
-            color: white;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .header-title {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 500;
-        }
-
-        .logout-btn {
-            background-color: var(--red-alert);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-
-        .logout-btn:hover {
-            background-color: #b71c1c;
-        }
-
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            box-sizing: border-box;
-            width: 100%;
-        }
+        .main-container { max-width: 1200px; margin: 0 auto; padding: 20px; box-sizing: border-box; width: 100%; }
 
         /* Navigation */
-        .tabs-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 10px;
-        }
+        .tabs-container { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
+        .tab-btn { background-color: transparent; border: none; color: var(--text-color); padding: 10px 20px; font-size: 16px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: all 0.2s; }
+        .tab-btn:hover { background-color: rgba(46, 125, 50, 0.1); }
+        .tab-btn.active { background-color: var(--primary-green); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        .tab-btn {
-            background-color: transparent;
-            border: none;
-            color: var(--text-color);
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .tab-btn:hover {
-            background-color: rgba(46, 125, 50, 0.1);
-        }
-
-        .tab-btn.active {
-            background-color: var(--primary-green);
-            color: white;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Cards */
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-
-        .card h3 {
-            margin-top: 0;
-            color: var(--primary-dark);
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        /* Form Elements */
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            font-size: 14px;
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: inherit;
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary-green);
-        }
+        /* Cards & Forms */
+        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; color: var(--primary-dark); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 14px; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; font-family: inherit; }
+        .form-control:focus { outline: none; border-color: var(--primary-green); }
 
         /* Buttons */
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            width: 100%;
-        }
+        .btn { display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 500; text-align: center; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; width: 100%; }
+        .btn-auto { width: auto; }
+        .btn-primary { background-color: var(--primary-green); color: white; }
+        .btn-primary:hover { background-color: var(--primary-green-hover); }
+        .btn-danger { background-color: var(--red-alert); color: white; }
+        .btn-danger:hover { background-color: #b71c1c; }
+        .btn-small { padding: 6px 12px; font-size: 12px; }
 
-        .btn-auto {
-            width: auto;
-        }
+        /* Layouts & Tables */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+        .table-responsive { overflow-x: auto; }
+        table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 600px; }
+        table.data-table th, table.data-table td { border: 1px solid var(--border-color); padding: 12px; text-align: left; }
+        table.data-table th { background-color: #f8f9fa; font-weight: 500; color: var(--primary-dark); }
+        table.data-table tr:nth-child(even) { background-color: #fafafa; }
 
-        .btn-primary {
-            background-color: var(--primary-green);
-            color: white;
-        }
+        /* Subject Tags */
+        .subject-tag { display: inline-block; background: #e2e8f0; padding: 5px 10px; border-radius: 4px; font-size: 13px; margin: 5px 5px 0 0; font-weight: 500; }
+        .delete-sub-btn { color: red; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
 
-        .btn-primary:hover {
-            background-color: var(--primary-green-hover);
-        }
+        /* PDF Export Section */
+        #pdfExportWrapper { position: absolute; left: -9999px; top: 0; }
+        #pdfExportArea { width: 1000px; padding: 40px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; font-size: 14px; }
+        .pdf-header { text-align: center; margin-bottom: 20px; }
+        .pdf-header h1 { margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; }
+        .pdf-header h2 { margin: 5px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .pdf-table th, .pdf-table td { border: 1px solid black; padding: 6px 4px; text-align: center; font-size: 14px; font-weight: bold; }
+        .pdf-table th.name-col { text-align: center; width: 240px; }
+        .pdf-table td.name-col { text-align: left; padding-left: 8px; }
 
-        .btn-danger {
-            background-color: var(--red-alert);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background-color: #b71c1c;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        /* Grid layouts */
-        .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        .grid-3 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .grid-2, .grid-3 {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Tables */
-        .table-responsive {
-            overflow-x: auto;
-        }
-
-        table.data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-            min-width: 600px;
-        }
-
-        table.data-table th, table.data-table td {
-            border: 1px solid var(--border-color);
-            padding: 12px;
-            text-align: left;
-        }
-
-        table.data-table th {
-            background-color: #f8f9fa;
-            font-weight: 500;
-            color: var(--primary-dark);
-        }
-
-        table.data-table tr:nth-child(even) {
-            background-color: #fafafa;
-        }
-
-        /* PDF Export Section (Hidden from screen initially) */
-        #pdfExportWrapper {
-            position: absolute;
-            left: -9999px;
-            top: 0;
-        }
-
-        #pdfExportArea {
-            width: 1000px; /* EXACTLY 1000px wide */
-            padding: 40px;
-            box-sizing: border-box;
-            background-color: #ffffff;
-            color: black;
-            font-family: Arial, sans-serif;
-            font-size: 14px; /* Base font size */
-        }
-
-        .pdf-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .pdf-header h1 {
-            margin: 0;
-            font-size: 22px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .pdf-header h2 {
-            margin: 5px 0 0 0;
-            font-size: 16px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .pdf-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-
-        .pdf-table th, .pdf-table td {
-            border: 1px solid black;
-            padding: 4px 2px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .pdf-table th.name-col {
-            text-align: center;
-            width: 240px;
-        }
-
-        .pdf-table td.name-col {
-            text-align: left;
-            padding-left: 8px;
-        }
-
+        /* -------------------------------------------------------------
+           PERFECT DYNAMIC VERTICAL HEADERS (Fixed for True Centering) 
+           ------------------------------------------------------------- */
         th.vertical-header {
-            height: 190px;
+            height: 160px; /* ആവശ്യത്തിനുള്ള കോളത്തിന്റെ നീളം */
             width: 45px;
             position: relative;
             padding: 0;
-            vertical-align: bottom;
+            vertical-align: middle; /* ബോക്സിന്റെ നടുവിൽ നിർത്താൻ */
         }
-        
         th.vertical-header span {
             position: absolute;
-            bottom: 25px;
+            top: 50%;
             left: 50%;
-            transform: translateX(-50%) rotate(-90deg);
-            transform-origin: center bottom;
+            transform: translate(-50%, -50%) rotate(-90deg); /* കൃത്യം സെന്ററിൽ താഴെ നിന്ന് മുകളിലേക്ക് */
             white-space: nowrap;
             display: inline-block;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             color: black;
         }
 
-        .pdf-summary-container {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
-        .pdf-summary-box {
-            width: 32%;
-            border-collapse: collapse;
-            text-align: center;
-            font-size: 14px;
-        }
-
-        .pdf-summary-box th, .pdf-summary-box td {
-            border: 1px solid black;
-            padding: 5px;
-            font-weight: bold;
-        }
-        
-        .pdf-summary-box th {
-            background-color: #f0f0f0;
-        }
-
-        .pdf-footer {
-            display: flex;
-            border: 1px solid black;
-            font-size: 14px;
-            font-weight: bold;
-            width: 100%;
-        }
-
-        .pdf-footer-left {
-            width: 30%;
-            border-right: 1px solid black;
-            padding: 10px;
-            text-align: center;
-            background-color: #f0f0f0;
-        }
-
-        .pdf-footer-right {
-            width: 70%;
-            padding: 10px;
-            text-align: center;
-            text-transform: uppercase;
-        }
+        .pdf-summary-container { display: flex; justify-content: space-between; gap: 20px; width: 100%; margin-bottom: 20px; }
+        .pdf-summary-box { width: 32%; border-collapse: collapse; text-align: center; font-size: 14px; }
+        .pdf-summary-box th, .pdf-summary-box td { border: 1px solid black; padding: 5px; font-weight: bold; }
+        .pdf-summary-box th { background-color: #f0f0f0; }
+        .pdf-footer { display: flex; border: 1px solid black; font-size: 14px; font-weight: bold; width: 100%; }
+        .pdf-footer-left { width: 30%; border-right: 1px solid black; padding: 10px; text-align: center; background-color: #f0f0f0; }
+        .pdf-footer-right { width: 70%; padding: 10px; text-align: center; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
     <header class="header">
-        <h1 class="header-title" id="displayMadrasaName">Madrasa Name</h1>
+        <h1 class="header-title">
+            <span id="displayMadrasaName">Madrasa Name</span> 
+            <span style="font-size: 16px; margin-left: 10px; color: #a5d6a7;">(Class: <span id="displayClassName">XX</span>)</span>
+        </h1>
         <button class="logout-btn" id="logoutBtn">Logout</button>
     </header>
 
@@ -397,43 +129,27 @@
         
         <div class="tabs-container">
             <button class="tab-btn active" data-tab="tab-students">1. Manage Students</button>
-            <button class="tab-btn" data-tab="tab-marks">2. Enter Marks</button>
+            <button class="tab-btn" data-tab="tab-marks">2. Enter Marks & Subjects</button>
             <button class="tab-btn" data-tab="tab-results">3. Results & PDF</button>
         </div>
 
-        <!-- TAB 1: Manage Students -->
         <div id="tab-students" class="tab-content active">
             <div class="grid-2">
                 <div class="card">
                     <h3>Add Student</h3>
-                    <div class="form-group">
-                        <label>Name</label>
-                        <input type="text" id="studentName" class="form-control" placeholder="Student Name">
-                    </div>
-                    <div class="form-group">
-                        <label>Admission No</label>
-                        <input type="text" id="admissionNo" class="form-control" placeholder="Admission No">
-                    </div>
+                    <div class="form-group"><label>Name</label><input type="text" id="studentName" class="form-control" placeholder="Student Name"></div>
+                    <div class="form-group"><label>Admission No</label><input type="text" id="admissionNo" class="form-control" placeholder="Admission No"></div>
                     <div class="form-group">
                         <label>Gender</label>
-                        <select id="gender" class="form-control">
-                            <option value="Male">Boy (Male)</option>
-                            <option value="Female">Girl (Female)</option>
-                        </select>
+                        <select id="gender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select>
                     </div>
-                    <div class="form-group">
-                        <label>Parent Phone</label>
-                        <input type="text" id="parentPhone" class="form-control" placeholder="Parent Phone">
-                    </div>
+                    <div class="form-group"><label>Parent Phone</label><input type="text" id="parentPhone" class="form-control" placeholder="Parent Phone"></div>
                     <button class="btn btn-primary" id="addStudentBtn">Add Student</button>
                 </div>
 
                 <div class="card">
                     <h3>Bulk Add (Excel)</h3>
-                    <div class="form-group">
-                        <label>Upload Excel File</label>
-                        <input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls">
-                    </div>
+                    <div class="form-group"><label>Upload Excel File</label><input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls"></div>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Required Columns: Name, AdmissionNo, Gender, Phone</p>
                     <button class="btn btn-primary" id="uploadStudentExcelBtn">Upload Excel</button>
                 </div>
@@ -443,25 +159,23 @@
                 <h3>Students List <button class="btn btn-danger btn-small btn-auto" id="deleteAllStudentsBtn">Delete All Students</button></h3>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Admission No</th>
-                                <th>Name</th>
-                                <th>Gender</th>
-                                <th>Parent Phone</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="studentsTableBody">
-                            <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
-                        </tbody>
+                        <thead><tr><th>Admission No</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Action</th></tr></thead>
+                        <tbody id="studentsTableBody"><tr><td colspan="5" style="text-align: center;">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 2: Enter Marks -->
         <div id="tab-marks" class="tab-content">
+            <div class="card" style="border-top: 4px solid #2e7d32;">
+                <h3>Manage Class Subjects</h3>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="newSubjectName" class="form-control" placeholder="Type Subject Name">
+                    <button class="btn btn-primary btn-auto" id="addSubjectBtn">Add Subject</button>
+                </div>
+                <div id="subjectTagsContainer" style="margin-top: 15px;"></div>
+            </div>
+
             <div class="card">
                 <h3>Exam Configuration</h3>
                 <div class="grid-3">
@@ -474,49 +188,29 @@
                             <option value="Annual Exam">Annual Exam</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Global Max Mark</label>
-                        <input type="number" id="globalMaxMark" class="form-control" value="100">
-                    </div>
-                    <div class="form-group">
-                        <label>Global Pass Mark</label>
-                        <input type="number" id="globalPassMark" class="form-control" value="35">
-                    </div>
+                    <div class="form-group"><label>Global Max Mark</label><input type="number" id="globalMaxMark" class="form-control" value="100"></div>
+                    <div class="form-group"><label>Global Pass Mark</label><input type="number" id="globalPassMark" class="form-control" value="35"></div>
                 </div>
             </div>
 
             <div class="grid-2">
                 <div class="card">
                     <h3>Manual Mark Entry</h3>
-                    <div class="form-group">
-                        <label>Select Student</label>
-                        <select id="markStudentSelect" class="form-control">
-                            <option value="">-- Select Student --</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Attendance</label>
-                        <input type="number" id="attendanceInput" class="form-control" placeholder="Days Present">
-                    </div>
-                    <div id="dynamicSubjectInputs">
-                        <!-- Loaded dynamically from admin subjects -->
-                    </div>
+                    <div class="form-group"><label>Select Student</label><select id="markStudentSelect" class="form-control"><option value="">-- Select Student --</option></select></div>
+                    <div class="form-group"><label>Attendance</label><input type="number" id="attendanceInput" class="form-control" placeholder="Days Present"></div>
+                    <div id="dynamicSubjectInputs"></div>
                     <button class="btn btn-primary" id="saveMarksBtn" style="margin-top: 15px;">Save Marks</button>
                 </div>
 
                 <div class="card">
                     <h3>Bulk Upload Marks (Excel)</h3>
-                    <div class="form-group">
-                        <label>Upload Marks Excel File</label>
-                        <input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls">
-                    </div>
+                    <div class="form-group"><label>Upload Marks Excel File</label><input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls"></div>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Columns: AdmissionNo, Attendance, [Subject Names]</p>
                     <button class="btn btn-primary" id="uploadMarksExcelBtn">Upload Marks</button>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 3: Results & PDF -->
         <div id="tab-results" class="tab-content">
             <div class="card">
                 <h3>Results Overview <button class="btn btn-primary btn-auto btn-small" id="downloadPdfBtn">Download PDF</button></h3>
@@ -531,66 +225,35 @@
                 </div>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead id="screenResultHead">
-                            <!-- Dynamically generated -->
-                        </thead>
-                        <tbody id="screenResultBody">
-                            <tr><td colspan="100%" style="text-align: center;">Loading...</td></tr>
-                        </tbody>
+                        <thead id="screenResultHead"></thead>
+                        <tbody id="screenResultBody"><tr><td colspan="100%" style="text-align: center;">Loading...</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
-
     </div>
 
-    <!-- Hidden PDF Export Area -->
     <div id="pdfExportWrapper">
         <div id="pdfExportArea">
             <div class="pdf-header">
                 <h1 id="pdfMadrasaName">MADRASA NAME</h1>
                 <h2 id="pdfExamTitle">EXAMINATION RESULT. CLASS: XX</h2>
             </div>
-
-            <table class="pdf-table">
-                <thead id="pdfThead">
-                    <!-- Head generated -->
-                </thead>
-                <tbody id="pdfTbody">
-                    <!-- Body generated -->
-                </tbody>
-            </table>
-
+            <table class="pdf-table"><thead id="pdfThead"></thead><tbody id="pdfTbody"></tbody></table>
             <div class="pdf-summary-container">
                 <table class="pdf-summary-box">
-                    <thead>
-                        <tr><th colspan="3">TOTAL STUDENTS</th></tr>
-                        <tr><th>B</th><th>G</th><th>TOTAL</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr id="pdfTotalRow"><td>0</td><td>0</td><td>0</td></tr>
-                    </tbody>
+                    <thead><tr><th colspan="3">TOTAL STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead>
+                    <tbody><tr id="pdfTotalRow"><td>0</td><td>0</td><td>0</td></tr></tbody>
                 </table>
                 <table class="pdf-summary-box">
-                    <thead>
-                        <tr><th colspan="3">PASSED STUDENTS</th></tr>
-                        <tr><th>B</th><th>G</th><th>TOTAL</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr id="pdfPassedRow"><td>0</td><td>0</td><td>0</td></tr>
-                    </tbody>
+                    <thead><tr><th colspan="3">PASSED STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead>
+                    <tbody><tr id="pdfPassedRow"><td>0</td><td>0</td><td>0</td></tr></tbody>
                 </table>
                 <table class="pdf-summary-box">
-                    <thead>
-                        <tr><th colspan="3">PERCENTAGE</th></tr>
-                        <tr><th>B</th><th>G</th><th>TOTAL</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr id="pdfPercentageRow"><td>0%</td><td>0%</td><td>0%</td></tr>
-                    </tbody>
+                    <thead><tr><th colspan="3">PERCENTAGE</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead>
+                    <tbody><tr id="pdfPercentageRow"><td>0%</td><td>0%</td><td>0%</td></tr></tbody>
                 </table>
             </div>
-
             <div class="pdf-footer">
                 <div class="pdf-footer-left">MUALLIM NAME</div>
                 <div class="pdf-footer-right" id="pdfTeacherName">TEACHER NAME</div>
@@ -598,7 +261,6 @@
         </div>
     </div>
 
-    <!-- Main Logic -->
     <script type="module" src="teacher_dashboard.js"></script>
 </body>
 </html>
