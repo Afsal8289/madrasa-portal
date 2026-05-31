@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Madrasa Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- PDF ജനറേറ്റ് ചെയ്യാൻ വേണ്ട ലൈബ്രറികൾ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- QR Code ജനറേറ്റ് ചെയ്യാൻ വേണ്ട ലൈബ്രറി -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <style>
         body { font-family: 'Poppins', sans-serif; background-color: #f0f4f8; margin: 0; padding: 15px; }
         .header { background-color: #2980b9; color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
@@ -13,12 +21,14 @@
         .logout-btn { background-color: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;}
         
         .container { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
-        @media (min-width: 768px) { .container { flex-direction: row; } .form-section { flex: 1; } .list-section { flex: 2; } }
+        @media (min-width: 992px) { .container { flex-direction: row; } .col-left { flex: 1; } .col-right { flex: 2; } }
         
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
-        .card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;}
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
         input, select { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px; }
         button.action-btn { background-color: #27ae60; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; }
+        button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; }
+        button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; } button.btn-dark { background-color: #34495e; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 500px; }
         .table-responsive { overflow-x: auto; }
@@ -27,10 +37,9 @@
 
         .class-tags-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .class-tag { background: #e8f4f8; border: 1px solid #bce8f1; padding: 5px 12px; border-radius: 20px; font-size: 13px; display: flex; align-items: center; gap: 8px; color: #2c3e50; font-weight: 600; }
-        .subject-tag { background: #fcf3cf; border: 1px solid #f7dc6f; padding: 5px 12px; border-radius: 20px; font-size: 13px; display: flex; align-items: center; gap: 8px; color: #7d6608; font-weight: 600; }
-        .tag-close { color: white; width: 18px; height: 18px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 12px; font-weight: bold; }
-        .class-close { background: #e74c3c; }
-        .subject-close { background: #e67e22; }
+        .tag-close { color: white; width: 18px; height: 18px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 12px; font-weight: bold; background: #e74c3c; }
+        
+        #tcStudentDetails { background: #ecf0f1; padding: 15px; border-radius: 5px; margin-top: 15px; display: none; }
     </style>
 </head>
 <body>
@@ -45,9 +54,10 @@
 
     <div class="container">
         
-        <div class="form-section">
-            <!-- 1. Manage Classes Section -->
-            <div class="card" style="margin-bottom: 20px;">
+        <!-- LEFT COLUMN -->
+        <div class="col-left">
+            <!-- Manage Classes -->
+            <div class="card">
                 <h3>Manage Classes</h3>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="newClassName" placeholder="e.g., Class 1 A" style="margin: 0;">
@@ -58,28 +68,20 @@
                 </div>
             </div>
 
-            <!-- 2. Manage Subjects Section -->
-            <div class="card" style="margin-bottom: 20px;">
-                <h3>Manage Subjects</h3>
-                <p style="font-size: 12px; color: #666; margin-top:0;">Add subjects specific to each class.</p>
-                
-                <label style="font-size: 13px; color: #555; font-weight: 600;">Select Class:</label>
-                <select id="subjectClassSelect" style="margin-bottom: 10px;">
-                    <option value="">Select a class first</option>
-                </select>
-
+            <!-- Issue TC Section -->
+            <div class="card">
+                <h3>Issue Transfer Certificate (TC)</h3>
+                <p style="font-size: 12px; color: #666; margin-top:0;">Search student to download TC and remove from register.</p>
                 <div style="display: flex; gap: 10px;">
-                    <input type="text" id="newSubjectName" placeholder="Subject Name (e.g., Quran)" style="margin: 0;" disabled>
-                    <button class="action-btn" id="addSubjectBtn" style="width: auto; padding: 10px 20px; background-color: #f39c12;" disabled>Add</button>
+                    <input type="text" id="tcAdnoSearch" placeholder="Enter Admission No" style="margin: 0;">
+                    <button class="action-btn" id="searchTcBtn" style="width: auto; padding: 10px 20px; background-color: #34495e;">Search</button>
                 </div>
-                
-                <p style="font-size: 13px; color: #2c3e50; margin-top: 15px; margin-bottom: 5px;"><b>Added Subjects:</b></p>
-                <div class="class-tags-container" id="subjectListContainer">
-                    <span style="color: #888; font-size: 13px;">Subjects will appear here when you select a class above...</span>
+                <div id="tcStudentDetails">
+                    <!-- Student details & TC Form will appear here -->
                 </div>
             </div>
 
-            <!-- 3. Add Teacher Section -->
+            <!-- Add Teacher Section -->
             <div class="card">
                 <h3>Add New Teacher</h3>
                 <input type="text" id="tName" placeholder="Teacher Name">
@@ -95,26 +97,89 @@
             </div>
         </div>
 
-        <!-- Teachers List Section -->
-        <div class="card list-section">
-            <h3>Teachers List</h3>
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Class Assigned</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="teacherTableBody">
-                        <tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>
-                    </tbody>
-                </table>
+        <!-- RIGHT COLUMN -->
+        <div class="col-right">
+            
+            <!-- Pending Admissions -->
+            <div class="card">
+                <h3>
+                    Online Admissions
+                    <div style="display:flex; gap:8px;">
+                        <button id="copyAdmissionLinkBtn" class="btn-small btn-blue">🔗 Copy Link</button>
+                        <button id="downloadQrBtn" class="btn-small btn-dark">📱 Download QR</button>
+                    </div>
+                </h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Student Name</th>
+                                <th>Class</th>
+                                <th>Place / Phone</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingAdmissionsBody">
+                            <tr><td colspan="5" style="text-align: center;">Loading data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+
+            <!-- Teachers List -->
+            <div class="card">
+                <h3>Teachers List</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Class Assigned</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherTableBody">
+                            <tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
 
+    </div>
+
+    <!-- മറച്ചു വെച്ചിരിക്കുന്ന QR കോഡ് ഏരിയ -->
+    <div id="qrcode" style="display:none;"></div>
+
+    <!-- മറച്ചു വെച്ചിരിക്കുന്ന TC PDF ടെംപ്ലേറ്റ് -->
+    <div style="position: absolute; left: -9999px; top: 0;">
+        <div id="tcPdfArea" style="width: 800px; padding: 50px; background: white; font-family: Arial, sans-serif; color: black; border: 4px solid #111;">
+            <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px;">
+                <h1 style="margin: 0; font-size: 32px; text-transform: uppercase;" id="tcMadrasaName">MADRASA NAME</h1>
+                <h2 style="margin: 10px 0 0 0; font-size: 22px; text-decoration: underline;">TRANSFER CERTIFICATE</h2>
+            </div>
+            <table style="width: 100%; font-size: 18px; line-height: 2.5;">
+                <tr><td style="width: 45%;"><strong>1. Admission No:</strong></td><td id="tcAdNoVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>2. Name of the Pupil:</strong></td><td id="tcNameVal" style="border-bottom: 1px dashed #999; font-weight: bold;"></td></tr>
+                <tr><td><strong>3. Name of Father/Guardian:</strong></td><td id="tcFatherVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>4. Date of Birth:</strong></td><td id="tcDobVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>5. Gender:</strong></td><td id="tcGenderVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>6. Place / Address:</strong></td><td id="tcPlaceVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>7. Class in which pupil last studied:</strong></td><td id="tcClassVal" style="border-bottom: 1px dashed #999; font-weight: bold;"></td></tr>
+                <tr><td><strong>8. Total No. of Working Days:</strong></td><td id="tcTotalDaysVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>9. No. of Days Attended:</strong></td><td id="tcAttendedDaysVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>10. Character and Conduct:</strong></td><td id="tcConductVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>11. Reason for leaving:</strong></td><td id="tcReasonVal" style="border-bottom: 1px dashed #999;"></td></tr>
+                <tr><td><strong>12. Date of issue of Certificate:</strong></td><td id="tcIssueDateVal" style="border-bottom: 1px dashed #999;"></td></tr>
+            </table>
+            <div style="margin-top: 80px; display: flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
+                <div>Prepared By<br>(Clerk/Teacher)</div>
+                <div style="text-align: right;">Headmaster / Principal<br>(Seal & Signature)</div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="admin_dashboard.js"></script>

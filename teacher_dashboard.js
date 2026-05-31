@@ -59,7 +59,7 @@ function getGrade(percentage, isPassed) {
     return "D+"; 
 }
 
-// DATE FORMAT HELPER 
+// DATE FORMAT HELPER
 function formatDate(dateStr) {
     if (!dateStr) return "-";
     if (String(dateStr).includes("-")) {
@@ -134,21 +134,17 @@ document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     } catch (e) {}
 });
 
-// പുതിയ സബ്ജക്റ്റ് ഡിലീറ്റ് സിസ്റ്റം (മാർക്ക് സഹിതം ഡിലീറ്റ് ആകും)
 window.deleteSubject = async (subName) => {
     if(!confirm(`Are you absolutely sure you want to delete the subject '${subName}'?\n\nWARNING: This will permanently DELETE all marks associated with this subject for ALL students in this class!`)) return;
     
     classSubjects = classSubjects.filter(s => s.name !== subName);
     
     try { 
-        // 1. ടീച്ചറുടെ ഡാറ്റാബേസിൽ നിന്ന് സബ്ജക്റ്റ് ഒഴിവാക്കുന്നു
         await updateDoc(doc(db, "users", teacherUid), { subjects: classSubjects }); 
         
-        // 2. ഈ ക്ലാസ്സിലെ എല്ലാ കുട്ടികളുടെയും മാർക്കുകൾ എടുക്കുന്നു
         const marksQuery = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
         const marksSnap = await getDocs(marksQuery);
         
-        // 3. ഓരോ കുട്ടിയുടെയും മാർക്കുകളിൽ നിന്നും ഈ സബ്ജക്റ്റ് ഒഴിവാക്കി ബാക്കിയുള്ളവ റീ-കാൽക്കുലേറ്റ് ചെയ്യുന്നു
         const updatePromises = marksSnap.docs.map(async (markDoc) => {
             const data = markDoc.data();
             let marksData = data.marks || {};
@@ -204,11 +200,11 @@ function renderSubjectsUI() {
     const tagsContainer = document.getElementById("subjectTagsContainer");
     tagsContainer.innerHTML = "";
     classSubjects.forEach(sub => { 
-        tagsContainer.innerHTML += `<div class="subject-tag">${sub.name} <span style="color:#2e7d32; font-size:11px;">(${sub.passMark}/${sub.maxMark})</span> <button class="delete-sub-btn" onclick="deleteSubject('${sub.name}')">X</button></div>`; 
+        tagsContainer.innerHTML += `<div class="subject-tag">${sub.name} <span style="color:#0ea5e9; font-size:11px;">(${sub.passMark}/${sub.maxMark})</span> <button class="delete-sub-btn" onclick="deleteSubject('${sub.name}')">X</button></div>`; 
     });
     
     const inputsContainer = document.getElementById("dynamicSubjectInputs");
-    inputsContainer.innerHTML = classSubjects.length === 0 ? "<p>No subjects added.</p>" : "";
+    inputsContainer.innerHTML = classSubjects.length === 0 ? "<p style='color:#64748b;'>No subjects added.</p>" : "";
     classSubjects.forEach(sub => { 
         inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark}, Pass: ${sub.passMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark or 'A'"></div>`; 
     });
@@ -227,14 +223,14 @@ document.getElementById("addStudentBtn").addEventListener("click", async () => {
 
     if (!name || !admissionNo) return alert("Name and Admission No are required.");
     
-    document.getElementById("addStudentBtn").textContent = "Adding...";
+    document.getElementById("addStudentBtn").textContent = "Saving...";
     try {
         await addDoc(collection(db, "students"), { name, admissionNo, gender, dob, fatherName, place, contactNo, whatsappNo, className: assignedClass, madrasaUid });
         ['studentName', 'admissionNo', 'dob', 'fatherName', 'place', 'contactNo', 'whatsappNo'].forEach(id => document.getElementById(id).value = "");
         clearCache(`cache_students_${assignedClass}`);
         await loadStudents();
     } catch (e) {}
-    document.getElementById("addStudentBtn").textContent = "Add Student";
+    document.getElementById("addStudentBtn").textContent = "Save Student Data";
 });
 
 async function loadStudents() {
@@ -261,7 +257,7 @@ async function loadStudents() {
         return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
     });
     
-    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="8" style="text-align: center;">No students</td></tr>' : "";
+    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="8" style="text-align: center; padding: 20px;">No students added yet.</td></tr>' : "";
     upgradeBody.innerHTML = students.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No students</td></tr>' : "";
     pdfListBody.innerHTML = "";
     markSelect.innerHTML = '<option value="">-- Select Student --</option>';
@@ -335,7 +331,7 @@ window.deleteStudent = async (studentId) => {
     } catch (e) {}
 };
 
-// --- UPGRADE STUDENTS (TAB 4) ---
+// --- UPGRADE STUDENTS ---
 document.getElementById("selectAllUpgrade").addEventListener("change", (e) => {
     const isChecked = e.target.checked;
     document.querySelectorAll(".upgrade-checkbox").forEach(cb => cb.checked = isChecked);
@@ -430,6 +426,56 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
 });
 
 // BULK EXCEL UPLOAD UPDATE
+document.getElementById("uploadStudentExcelBtn").addEventListener("click", () => {
+    const file = document.getElementById("studentExcel").files[0];
+    if (!file) return alert("Select an Excel file.");
+    
+    document.getElementById("uploadStudentExcelBtn").textContent = "Uploading...";
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: "array" });
+            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            let count = 0;
+            
+            for (const row of json) {
+                const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
+                const admKey = Object.keys(row).find(k => k.toLowerCase() === 'admissionno');
+                const genderKey = Object.keys(row).find(k => k.toLowerCase() === 'gender');
+                
+                if (!nameKey || !admKey) continue;
+                
+                const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob');
+                const fatherKey = Object.keys(row).find(k => k.toLowerCase() === 'fathername');
+                const placeKey = Object.keys(row).find(k => k.toLowerCase() === 'place');
+                const contactKey = Object.keys(row).find(k => k.toLowerCase() === 'contactno');
+                const whatsappKey = Object.keys(row).find(k => k.toLowerCase() === 'whatsappno');
+
+                await addDoc(collection(db, "students"), {
+                    name: String(row[nameKey]).trim(),
+                    admissionNo: String(row[admKey]).trim(),
+                    gender: genderKey ? String(row[genderKey]).trim() : "Male",
+                    dob: dobKey ? String(row[dobKey]).trim() : "",
+                    fatherName: fatherKey ? String(row[fatherKey]).trim() : "",
+                    place: placeKey ? String(row[placeKey]).trim() : "",
+                    contactNo: contactKey ? String(row[contactKey]).trim() : "",
+                    whatsappNo: whatsappKey ? String(row[whatsappKey]).trim() : "",
+                    className: assignedClass, 
+                    madrasaUid
+                });
+                count++;
+            }
+            clearCache(`cache_students_${assignedClass}`);
+            alert(`Uploaded ${count} students successfully.`);
+            document.getElementById("studentExcel").value = "";
+            await loadStudents();
+        } catch (err) { alert("Error parsing excel."); }
+        document.getElementById("uploadStudentExcelBtn").textContent = "Upload Excel Data";
+    };
+    reader.readAsArrayBuffer(file);
+});
+
 document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     const file = document.getElementById("marksExcel").files[0];
     const term = document.getElementById("examTerm").value;
@@ -559,7 +605,7 @@ async function loadResults() {
     }
 
     if (results.length === 0) {
-        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center;">No results</td></tr>`;
+        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:20px;">No results found for ${term}.</td></tr>`;
         ['pdfTbody1', 'pdfTbody2', 'deskLabelsGrid'].forEach(id => document.getElementById(id).innerHTML = "");
         return;
     }
@@ -669,12 +715,12 @@ async function loadPublishSettings(term) {
             document.getElementById("publishStatus").value = data.isPublished ? "published" : "hidden";
             document.getElementById("publishDateTime").value = data.publishDateTime || "";
             statusText.textContent = data.isPublished ? "Current Status: Published (Visible to Students)" : "Current Status: Locked (Hidden from Students)";
-            statusText.style.color = data.isPublished ? "#2e7d32" : "#d32f2f";
+            statusText.style.color = data.isPublished ? "#0ea5e9" : "#ef4444";
         } else {
             document.getElementById("publishStatus").value = "hidden";
             document.getElementById("publishDateTime").value = "";
             statusText.textContent = "Current Status: Locked (Default)";
-            statusText.style.color = "#d32f2f";
+            statusText.style.color = "#ef4444";
         }
     } catch(e) {
         console.error("Error loading publish settings", e);
@@ -704,7 +750,7 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
     document.getElementById("savePublishSettingsBtn").textContent = "Save Publish Settings";
 });
 
-// PDF Generator
+// PDF Generator with Dynamic Naming
 function generatePDF(areaId, fileName, orientation = 'p') {
     const area = document.getElementById(areaId);
     const wrapper = area.parentElement;
@@ -732,7 +778,22 @@ function generatePDF(areaId, fileName, orientation = 'p') {
     });
 }
 
-document.getElementById("downloadStudentListBtn").addEventListener("click", () => generatePDF("pdfStudentListArea", `${assignedClass}_Students_List.pdf`, 'p'));
-document.getElementById("downloadDetailedPdfBtn").addEventListener("click", () => generatePDF("pdfExportArea", `${assignedClass}_Marklist_Old.pdf`, 'p'));
-document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => generatePDF("pdfNoticeBoardArea", `${assignedClass}_NoticeBoard_Result.pdf`, 'l')); 
-document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () => generatePDF("pdfDeskLabelsArea", `${assignedClass}_Desk_Labels.pdf`, 'p'));
+// PDF Download Button Listeners with Dynamic Filenames
+document.getElementById("downloadStudentListBtn").addEventListener("click", () => {
+    generatePDF("pdfStudentListArea", `Class_${assignedClass}_Students_List.pdf`, 'p');
+});
+
+document.getElementById("downloadDetailedPdfBtn").addEventListener("click", () => {
+    const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
+    generatePDF("pdfExportArea", `Class_${assignedClass}_${term}_Marklist.pdf`, 'p');
+});
+
+document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => {
+    const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
+    generatePDF("pdfNoticeBoardArea", `Class_${assignedClass}_${term}_NoticeBoard.pdf`, 'l'); 
+});
+
+document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () => {
+    const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
+    generatePDF("pdfDeskLabelsArea", `Class_${assignedClass}_${term}_DeskLabels.pdf`, 'p');
+});

@@ -11,50 +11,64 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
-        :root { --bg-color: #f1f5f9; --text-color: #333333; --primary-dark: #2c3e50; --primary-green: #2e7d32; --primary-green-hover: #1b5e20; --border-color: #cbd5e1; --card-bg: #ffffff; --red-alert: #d32f2f; }
+        :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; /* Changed to a modern blue-ish theme */ --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
         body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; }
         *, *::before, *::after { box-sizing: inherit; }
-        .header { background-color: var(--primary-dark); color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header-title { margin: 0; font-size: 22px; font-weight: 500; }
-        .logout-btn { background-color: var(--red-alert); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background-color 0.2s; }
-        .logout-btn:hover { background-color: #b71c1c; }
-        .main-container { max-width: 1200px; margin: 0 auto; padding: 20px; box-sizing: border-box; width: 100%; }
         
-        .tabs-container { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; overflow-x: auto; white-space: nowrap;}
-        .tab-btn { background-color: transparent; border: none; color: var(--text-color); padding: 10px 20px; font-size: 16px; font-weight: 500; cursor: pointer; border-radius: 4px; transition: all 0.2s; }
-        .tab-btn:hover { background-color: rgba(46, 125, 50, 0.1); }
-        .tab-btn.active { background-color: var(--primary-green); color: white; }
+        .header { background-color: var(--card-bg); color: var(--primary-dark); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-bottom: 1px solid var(--border-color); }
+        .header-title { margin: 0; font-size: 22px; font-weight: 700; display: flex; align-items: center; }
+        .header-logo { margin-right: 12px; color: var(--primary-green); }
+        
+        .logout-btn { background-color: #f1f5f9; color: var(--text-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+        .logout-btn:hover { background-color: #e2e8f0; color: var(--red-alert); border-color: var(--red-alert); }
+        
+        .main-container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; box-sizing: border-box; width: 100%; }
+        
+        .tabs-container { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; overflow-x: auto; white-space: nowrap;}
+        .tab-btn { background-color: transparent; border: none; color: var(--text-color); padding: 10px 20px; font-size: 15px; font-weight: 500; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
+        .tab-btn:hover { background-color: #f1f5f9; }
+        .tab-btn.active { background-color: var(--primary-dark); color: white; }
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
         
-        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .card h3 { margin-top: 0; color: var(--primary-dark); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 20px; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 14px; }
-        .form-control { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; }
-        .form-control:focus { outline: none; border-color: var(--primary-green); }
+        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; color: var(--primary-dark); border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px; font-size: 18px; font-weight: 700; }
         
-        .btn-custom { display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 500; text-align: center; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; width: 100%; }
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 13px; color: #64748b; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; transition: all 0.2s; background-color: #f8fafc; }
+        .form-control:focus { outline: none; border-color: var(--primary-green); background-color: #fff; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        
+        .btn-custom { display: inline-block; padding: 10px 20px; font-size: 14px; font-weight: 600; text-align: center; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; width: 100%; }
         .btn-auto { width: auto; }
         .btn-primary-custom { background-color: var(--primary-green); color: white; }
         .btn-primary-custom:hover { background-color: var(--primary-green-hover); }
         .btn-danger-custom { background-color: var(--red-alert); color: white; }
-        .btn-warning-custom { background-color: #f39c12; color: white; }
-        .btn-info-custom { background-color: #17a2b8; color: white; }
+        .btn-warning-custom { background-color: #f59e0b; color: white; }
+        .btn-info-custom { background-color: #8b5cf6; color: white; }
         .btn-small { padding: 6px 12px; font-size: 12px; }
         
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
         @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
         
-        .table-responsive { overflow-x: auto; }
+        /* Divider for OR section */
+        .divider-text { text-align: center; margin: 30px 0; position: relative; }
+        .divider-text::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: var(--border-color); z-index: 1; }
+        .divider-text span { background: var(--card-bg); padding: 0 15px; position: relative; z-index: 2; color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+        .excel-box { background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 20px; text-align: center; }
+
+        .table-responsive { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border-color); }
         table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 600px; }
-        table.data-table th, table.data-table td { border: 1px solid var(--border-color); padding: 10px; text-align: left; }
-        table.data-table th { background-color: #f8f9fa; font-weight: 500; color: var(--primary-dark); }
+        table.data-table th, table.data-table td { border-bottom: 1px solid var(--border-color); padding: 12px 15px; text-align: left; }
+        table.data-table th { background-color: #f1f5f9; font-weight: 600; color: var(--text-color); white-space: nowrap; }
+        table.data-table tbody tr:hover { background-color: #f8fafc; }
         
-        .subject-tag { display: inline-block; background: #e2e8f0; padding: 5px 10px; border-radius: 4px; font-size: 13px; margin: 5px 5px 0 0; font-weight: 500; }
-        .delete-sub-btn { color: red; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
+        .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 6px; font-size: 13px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
+        .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
         
+        /* PDF EXPORT AREAS */
         .pdf-wrapper { position: absolute; left: -9999px; top: 0; background: white; }
         .pdf-area-standard { padding: 40px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
         .pdf-header { text-align: center; margin-bottom: 20px; }
@@ -94,8 +108,11 @@
 
     <header class="header">
         <h1 class="header-title">
+            <svg class="header-logo" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
             <span id="displayMadrasaName">Madrasa Name</span> 
-            <span style="font-size: 16px; margin-left: 10px; color: #a5d6a7;">(Class: <span id="displayClassName">XX</span>)</span>
+            <span style="font-size: 15px; margin-left: 10px; color: #64748b; font-weight: 500;">(Class: <span id="displayClassName">XX</span>)</span>
         </h1>
         <button class="logout-btn" id="logoutBtn">Logout</button>
     </header>
@@ -109,37 +126,43 @@
         </div>
 
         <div id="tab-students" class="tab-content active">
-            <div class="grid-2">
-                <div class="card">
-                    <h3>Add New Student</h3>
-                    <div class="grid-2">
-                        <div class="form-group"><label>Name *</label><input type="text" id="studentName" class="form-control" placeholder="Name"></div>
-                        <div class="form-group"><label>Admission No *</label><input type="text" id="admissionNo" class="form-control" placeholder="Ad. No"></div>
-                        <div class="form-group"><label>Gender *</label><select id="gender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select></div>
-                        <div class="form-group"><label>Date of Birth</label><input type="date" id="dob" class="form-control"></div>
-                        <div class="form-group"><label>Father's Name</label><input type="text" id="fatherName" class="form-control" placeholder="Father's Name"></div>
-                        <div class="form-group"><label>Place</label><input type="text" id="place" class="form-control" placeholder="Place"></div>
-                        <div class="form-group"><label>Contact No</label><input type="text" id="contactNo" class="form-control" placeholder="Phone Number"></div>
-                        <div class="form-group"><label>WhatsApp No</label><input type="text" id="whatsappNo" class="form-control" placeholder="WhatsApp Number"></div>
-                    </div>
-                    <button class="btn-custom btn-primary-custom" id="addStudentBtn">Add Student</button>
+            
+            <div class="card" style="max-width: 900px; margin: 0 auto 30px auto; border-top: 4px solid var(--primary-green);">
+                <h3>Student Registration</h3>
+                
+                <div class="grid-2">
+                    <div class="form-group"><label>Name *</label><input type="text" id="studentName" class="form-control" placeholder="Student Name"></div>
+                    <div class="form-group"><label>Admission No *</label><input type="text" id="admissionNo" class="form-control" placeholder="Ad. No"></div>
+                    <div class="form-group"><label>Gender *</label><select id="gender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select></div>
+                    <div class="form-group"><label>Date of Birth</label><input type="date" id="dob" class="form-control"></div>
+                    <div class="form-group"><label>Father's Name</label><input type="text" id="fatherName" class="form-control" placeholder="Father's Name"></div>
+                    <div class="form-group"><label>Place</label><input type="text" id="place" class="form-control" placeholder="Place"></div>
+                    <div class="form-group"><label>Contact No</label><input type="text" id="contactNo" class="form-control" placeholder="Phone Number"></div>
+                    <div class="form-group"><label>WhatsApp No</label><input type="text" id="whatsappNo" class="form-control" placeholder="WhatsApp Number"></div>
+                </div>
+                
+                <div class="mt-3" style="text-align: right;">
+                    <button class="btn-custom btn-primary-custom btn-auto" id="addStudentBtn" style="min-width: 200px;">Save Student Data</button>
                 </div>
 
-                <div class="card">
-                    <h3>Bulk Add (Excel)</h3>
-                    <div class="form-group"><label>Upload Excel File</label><input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls"></div>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px; line-height: 1.5;">
-                        <strong>Columns Required:</strong> Name, AdmissionNo, Gender <br>
+                <div class="divider-text"><span>Or Bulk Add via Excel</span></div>
+
+                <div class="excel-box">
+                    <div class="form-group mx-auto" style="max-width: 400px; text-align: left;">
+                        <label>Upload Student Excel File</label>
+                        <input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls">
+                    </div>
+                    <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">
+                        <strong>Required Columns:</strong> Name, AdmissionNo, Gender | 
                         <strong>Optional:</strong> DOB, FatherName, Place, ContactNo, WhatsAppNo <br>
-                        <small style="color: #2e7d32;">(Note: Format DOB as DD-MM-YYYY in Excel)</small>
                     </p>
-                    <button class="btn-custom btn-primary-custom" id="uploadStudentExcelBtn">Upload Excel</button>
+                    <button class="btn-custom btn-primary-custom btn-auto" id="uploadStudentExcelBtn">Upload Excel Data</button>
                 </div>
             </div>
 
             <div class="card">
-                <h3 style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-                    Students List 
+                <h3 style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: none;">
+                    Registered Students List 
                     <div style="display:flex; gap:10px;">
                         <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadStudentListBtn">Download List PDF</button>
                         <button class="btn-custom btn-danger-custom btn-auto btn-small" id="deleteAllStudentsBtn">Delete All</button>
@@ -148,19 +171,19 @@
                 <div class="table-responsive">
                     <table class="data-table">
                         <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th><th>Action</th></tr></thead>
-                        <tbody id="studentsTableBody"><tr><td colspan="8" style="text-align: center;">Loading...</td></tr></tbody>
+                        <tbody id="studentsTableBody"><tr><td colspan="8" style="text-align: center; padding: 20px;">Loading data...</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
         <div id="tab-marks" class="tab-content">
-            <div class="card" style="border-top: 4px solid #2e7d32;">
+            <div class="card" style="border-top: 4px solid var(--primary-green);">
                 <h3>Manage Class Subjects & Marks</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <input type="text" id="newSubjectName" class="form-control" placeholder="Subject Name" style="flex: 2; min-width: 150px;">
-                    <input type="number" id="newSubjectMaxMark" class="form-control" placeholder="Max Mark (eg. 100)" style="flex: 1; min-width: 100px;">
-                    <input type="number" id="newSubjectPassMark" class="form-control" placeholder="Pass Mark (eg. 35)" style="flex: 1; min-width: 100px;">
+                    <input type="number" id="newSubjectMaxMark" class="form-control" placeholder="Max Mark" style="flex: 1; min-width: 100px;">
+                    <input type="number" id="newSubjectPassMark" class="form-control" placeholder="Pass Mark" style="flex: 1; min-width: 100px;">
                     <button class="btn-custom btn-primary-custom btn-auto" id="addSubjectBtn">Add Subject</button>
                 </div>
                 <div id="subjectTagsContainer" style="margin-top: 15px;"></div>
@@ -203,10 +226,10 @@
         <div id="tab-results" class="tab-content">
             
             <div class="card">
-                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: 1px solid #cbd5e1; padding-bottom: 15px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
                     <h3 style="border:none; margin:0; padding:0;">Results Overview</h3>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="btn-custom btn-primary-custom btn-auto btn-small" id="downloadDetailedPdfBtn">Download Marklist</button>
+                        <button class="btn-custom btn-primary-custom btn-auto btn-small" id="downloadDetailedPdfBtn">Download Marklist PDF</button>
                         <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadNoticeBoardPdfBtn">Download Notice Board PDF</button>
                         <button class="btn-custom btn-warning-custom btn-auto btn-small" id="downloadDeskLabelsBtn">Download Desk Labels</button>
                     </div>
@@ -222,7 +245,7 @@
                 <div class="table-responsive mt-3">
                     <table class="data-table">
                         <thead id="screenResultHead"></thead>
-                        <tbody id="screenResultBody"><tr><td colspan="100%" style="text-align: center;">Loading...</td></tr></tbody>
+                        <tbody id="screenResultBody"><tr><td colspan="100%" style="text-align: center; padding:20px;">Loading data...</td></tr></tbody>
                     </table>
                 </div>
                 
@@ -231,9 +254,9 @@
                 </div>
             </div>
 
-            <div class="card" style="border-top: 4px solid #17a2b8;">
+            <div class="card" style="border-top: 4px solid var(--primary-dark);">
                 <h3>Result Publish Management</h3>
-                <p style="font-size: 13px; color: #555;">Control when students and parents can view their results on the portal.</p>
+                <p style="font-size: 13px; color: #64748b;">Control when students and parents can view their results on the portal.</p>
                 
                 <div class="grid-3 align-items-end">
                     <div class="form-group">
@@ -265,7 +288,7 @@
         </div>
 
         <div id="tab-upgrade" class="tab-content">
-            <div class="card" style="border-top: 4px solid #f39c12;">
+            <div class="card" style="border-top: 4px solid #f59e0b;">
                 <h3>Upgrade Students to Next Class</h3>
                 <div class="form-group" style="max-width: 300px;"><label>Select Target Class</label><select id="upgradeTargetClass" class="form-control"><option value="1">Class 1</option><option value="2">Class 2</option><option value="3">Class 3</option><option value="4">Class 4</option><option value="5">Class 5</option><option value="6">Class 6</option><option value="7">Class 7</option><option value="8">Class 8</option><option value="9">Class 9</option><option value="10">Class 10</option><option value="11">Class 11</option><option value="12">Class 12</option></select></div>
                 <div class="table-responsive mt-3"><table class="data-table"><thead><tr><th><input type="checkbox" id="selectAllUpgrade"> All</th><th>Ad.No</th><th>Name</th><th>Gender</th></tr></thead><tbody id="upgradeTableBody"><tr><td colspan="4" style="text-align: center;">Loading...</td></tr></tbody></table></div>
