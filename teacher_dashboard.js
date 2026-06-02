@@ -59,7 +59,6 @@ function getGrade(percentage, isPassed) {
     return "D+"; 
 }
 
-// DATE FORMAT HELPER
 function formatDate(dateStr) {
     if (!dateStr) return "-";
     if (String(dateStr).includes("-")) {
@@ -796,4 +795,17 @@ document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", (
 document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () => {
     const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
     generatePDF("pdfDeskLabelsArea", `Class_${assignedClass}_${term}_DeskLabels.pdf`, 'p');
+});
+
+// --- Copy Result Link ---
+document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
+    // റിസൾട്ട് പേജിന്റെ ലിങ്ക് ഉണ്ടാക്കുന്നു
+    const resultUrl = `${window.location.origin}/result.html?mid=${madrasaUid}`;
+    
+    // ലിങ്ക് ഡിവൈസിലേക്ക് കോപ്പി ചെയ്യുന്നു
+    navigator.clipboard.writeText(resultUrl).then(() => {
+        alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.");
+    }).catch(err => {
+        alert("Error copying link.");
+    });
 });

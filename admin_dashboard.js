@@ -58,35 +58,6 @@ document.getElementById('copyAdmissionLinkBtn').addEventListener('click', () => 
     });
 });
 
-// --- Download QR Code Logic ---
-document.getElementById('downloadQrBtn').addEventListener('click', () => {
-    const admissionUrl = `${window.location.origin}/admission.html?mid=${adminUid}`;
-    const qrContainer = document.getElementById("qrcode");
-    qrContainer.innerHTML = ""; // Clear old QR if any
-    
-    // Generate new QR Code
-    new QRCode(qrContainer, {
-        text: admissionUrl,
-        width: 256,
-        height: 256,
-        colorDark : "#000000",
-        colorLight : "#ffffff",
-        correctLevel : QRCode.CorrectLevel.H
-    });
-
-    // Short delay to allow QR code rendering, then download
-    setTimeout(() => {
-        const canvas = qrContainer.querySelector("canvas");
-        if (canvas) {
-            const imgData = canvas.toDataURL("image/png");
-            const link = document.createElement('a');
-            link.href = imgData;
-            link.download = `Admission_QRCode_${madrasaIdCode || 'Madrasa'}.png`;
-            link.click();
-        }
-    }, 300);
-});
-
 // 1. Load Madrasa Data and Classes
 async function loadMadrasaData() {
     const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses'));
@@ -189,7 +160,6 @@ async function loadPendingAdmissions() {
                 displayDate = `${d.getDate()}-${d.getMonth()+1}-${d.getFullYear()}`;
             }
 
-            // S/o or D/o Logic Fix
             const relationPrefix = data.gender === "Female" ? "D/o" : "S/o";
 
             const tr = document.createElement('tr');

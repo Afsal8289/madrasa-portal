@@ -11,7 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
-        :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; /* Changed to a modern blue-ish theme */ --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
+        :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
         body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; }
         *, *::before, *::after { box-sizing: inherit; }
         
@@ -52,7 +52,6 @@
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
         @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
         
-        /* Divider for OR section */
         .divider-text { text-align: center; margin: 30px 0; position: relative; }
         .divider-text::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: var(--border-color); z-index: 1; }
         .divider-text span { background: var(--card-bg); padding: 0 15px; position: relative; z-index: 2; color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
@@ -68,7 +67,6 @@
         .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 6px; font-size: 13px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
         .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
         
-        /* PDF EXPORT AREAS */
         .pdf-wrapper { position: absolute; left: -9999px; top: 0; background: white; }
         .pdf-area-standard { padding: 40px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
         .pdf-header { text-align: center; margin-bottom: 20px; }
@@ -182,8 +180,8 @@
                 <h3>Manage Class Subjects & Marks</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <input type="text" id="newSubjectName" class="form-control" placeholder="Subject Name" style="flex: 2; min-width: 150px;">
-                    <input type="number" id="newSubjectMaxMark" class="form-control" placeholder="Max Mark" style="flex: 1; min-width: 100px;">
-                    <input type="number" id="newSubjectPassMark" class="form-control" placeholder="Pass Mark" style="flex: 1; min-width: 100px;">
+                    <input type="number" id="newSubjectMaxMark" class="form-control" placeholder="Max Mark (eg. 100)" style="flex: 1; min-width: 100px;">
+                    <input type="number" id="newSubjectPassMark" class="form-control" placeholder="Pass Mark (eg. 35)" style="flex: 1; min-width: 100px;">
                     <button class="btn-custom btn-primary-custom btn-auto" id="addSubjectBtn">Add Subject</button>
                 </div>
                 <div id="subjectTagsContainer" style="margin-top: 15px;"></div>
@@ -229,6 +227,8 @@
                 <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
                     <h3 style="border:none; margin:0; padding:0;">Results Overview</h3>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="btn-custom btn-auto btn-small" id="copyResultLinkBtn" style="background-color: #10b981; color: white;">🔗 Copy Public Result Link</button>
+                        
                         <button class="btn-custom btn-primary-custom btn-auto btn-small" id="downloadDetailedPdfBtn">Download Marklist PDF</button>
                         <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadNoticeBoardPdfBtn">Download Notice Board PDF</button>
                         <button class="btn-custom btn-warning-custom btn-auto btn-small" id="downloadDeskLabelsBtn">Download Desk Labels</button>

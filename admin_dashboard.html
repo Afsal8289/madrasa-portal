@@ -6,12 +6,8 @@
     <title>Madrasa Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     
-    <!-- PDF ജനറേറ്റ് ചെയ്യാൻ വേണ്ട ലൈബ്രറികൾ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
-    <!-- QR Code ജനറേറ്റ് ചെയ്യാൻ വേണ്ട ലൈബ്രറി -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
         body { font-family: 'Poppins', sans-serif; background-color: #f0f4f8; margin: 0; padding: 15px; }
@@ -24,11 +20,11 @@
         @media (min-width: 992px) { .container { flex-direction: row; } .col-left { flex: 1; } .col-right { flex: 2; } }
         
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
         input, select { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px; }
         button.action-btn { background-color: #27ae60; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; }
         button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; }
-        button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; } button.btn-dark { background-color: #34495e; }
+        button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 500px; }
         .table-responsive { overflow-x: auto; }
@@ -54,9 +50,7 @@
 
     <div class="container">
         
-        <!-- LEFT COLUMN -->
         <div class="col-left">
-            <!-- Manage Classes -->
             <div class="card">
                 <h3>Manage Classes</h3>
                 <div style="display: flex; gap: 10px;">
@@ -68,7 +62,6 @@
                 </div>
             </div>
 
-            <!-- Issue TC Section -->
             <div class="card">
                 <h3>Issue Transfer Certificate (TC)</h3>
                 <p style="font-size: 12px; color: #666; margin-top:0;">Search student to download TC and remove from register.</p>
@@ -77,11 +70,9 @@
                     <button class="action-btn" id="searchTcBtn" style="width: auto; padding: 10px 20px; background-color: #34495e;">Search</button>
                 </div>
                 <div id="tcStudentDetails">
-                    <!-- Student details & TC Form will appear here -->
-                </div>
+                    </div>
             </div>
 
-            <!-- Add Teacher Section -->
             <div class="card">
                 <h3>Add New Teacher</h3>
                 <input type="text" id="tName" placeholder="Teacher Name">
@@ -97,17 +88,12 @@
             </div>
         </div>
 
-        <!-- RIGHT COLUMN -->
         <div class="col-right">
             
-            <!-- Pending Admissions -->
             <div class="card">
                 <h3>
                     Online Admissions
-                    <div style="display:flex; gap:8px;">
-                        <button id="copyAdmissionLinkBtn" class="btn-small btn-blue">🔗 Copy Link</button>
-                        <button id="downloadQrBtn" class="btn-small btn-dark">📱 Download QR</button>
-                    </div>
+                    <button id="copyAdmissionLinkBtn" class="btn-small btn-blue">🔗 Copy Form Link</button>
                 </h3>
                 <div class="table-responsive">
                     <table>
@@ -127,7 +113,6 @@
                 </div>
             </div>
 
-            <!-- Teachers List -->
             <div class="card">
                 <h3>Teachers List</h3>
                 <div class="table-responsive">
@@ -151,10 +136,6 @@
 
     </div>
 
-    <!-- മറച്ചു വെച്ചിരിക്കുന്ന QR കോഡ് ഏരിയ -->
-    <div id="qrcode" style="display:none;"></div>
-
-    <!-- മറച്ചു വെച്ചിരിക്കുന്ന TC PDF ടെംപ്ലേറ്റ് -->
     <div style="position: absolute; left: -9999px; top: 0;">
         <div id="tcPdfArea" style="width: 800px; padding: 50px; background: white; font-family: Arial, sans-serif; color: black; border: 4px solid #111;">
             <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px;">
