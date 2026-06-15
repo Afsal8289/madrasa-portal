@@ -204,9 +204,22 @@ function renderSubjectsUI() {
     
     const inputsContainer = document.getElementById("dynamicSubjectInputs");
     inputsContainer.innerHTML = classSubjects.length === 0 ? "<p style='color:#64748b;'>No subjects added.</p>" : "";
+    
     classSubjects.forEach(sub => { 
         inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark}, Pass: ${sub.passMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark or 'A'"></div>`; 
     });
+
+    // പുതിയ മാറ്റം: Force Promote Checkbox മാർക്ക് ആഡ് ചെയ്യാൻ എളുപ്പത്തിൽ കൊടുക്കുന്നു
+    if(classSubjects.length > 0) {
+        inputsContainer.innerHTML += `
+        <div class="form-group mt-3" style="background: #e0f2fe; padding: 12px; border-radius: 6px; border: 1px solid #bae6fd;">
+            <label style="display: flex; align-items: center; gap: 8px; margin: 0; color: #0369a1; font-weight: bold; cursor: pointer; font-size: 14px;">
+                <input type="checkbox" id="forcePromoteCheck" style="width: 18px; height: 18px; cursor: pointer;">
+                Force Promote Student (Without entering marks)
+            </label>
+        </div>
+        `;
+    }
 }
 
 // --- TAB 1: ADD & LOAD STUDENTS ---
@@ -264,6 +277,10 @@ async function loadStudents() {
     document.getElementById("pdfMadrasaName4").textContent = madrasaNameGlobal;
     document.getElementById("pdfClassTitle4").textContent = `CLASS: ${assignedClass.toUpperCase()} - STUDENTS LIST`;
 
+    // പുതിയ മാറ്റം: ഡെസ്ക് ലേബൽ മാർക്ക് ഇല്ലാതെ തന്നെ കുട്ടികളുടെ ലിസ്റ്റിൽ നിന്നും ജനറേറ്റ് ചെയ്യുന്നു
+    let deskGrid = "";
+    let boyRoll = 1, girlRoll = 1;
+
     students.forEach(st => {
         studentsMap[st.admissionNo] = st;
         const displayDob = formatDate(st.dob);
@@ -280,7 +297,25 @@ async function loadStudents() {
             <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td></tr>`;
 
         markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}" data-adm="${st.admissionNo}">${st.admissionNo} - ${st.name}</option>`;
+
+        // ഡെസ്ക് ലേബൽ കോഡ്
+        const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
+        const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
+        
+        deskGrid += `
+            <div class="desk-label-box" style="border-color: ${color}; color: ${color};">
+                <p>Roll No: ${roll}</p>
+                <p>Name: ${st.name.toUpperCase()}</p>
+                <p>Class: ${assignedClass.toUpperCase()}</p>
+            </div>
+        `;
     });
+    
+    // ഡെസ്ക് ലേബലുകൾ ആഡ് ചെയ്യുന്നു
+    const deskLabelsGridElement = document.getElementById("deskLabelsGrid");
+    if(deskLabelsGridElement) {
+        deskLabelsGridElement.innerHTML = deskGrid;
+    }
 }
 
 window.openEditModal = (adNo) => {
@@ -355,12 +390,14 @@ document.getElementById("processUpgradeBtn").addEventListener("click", async () 
     document.getElementById("processUpgradeBtn").textContent = "Upgrade Selected Students";
 });
 
-// --- MARKS ENTRY ---
+// --- MARKS ENTRY & PROMOTE LOGIC ---
 document.getElementById("markStudentSelect").addEventListener("change", async (e) => {
     const studentId = e.target.value; const term = document.getElementById("examTerm").value;
     if (!studentId || !term) return;
     const markDoc = await getDoc(doc(db, "marks", `${studentId}_${term.replace(/\s+/g, '')}`));
     
+    const forcePromoteCheck = document.getElementById("forcePromoteCheck");
+
     if (markDoc.exists()) {
         const data = markDoc.data();
         document.getElementById("attendanceInput").value = data.attendance || "";
@@ -368,10 +405,12 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
             const subName = inp.getAttribute("data-subject");
             inp.value = data.marks && data.marks[subName] !== undefined ? data.marks[subName] : "";
         });
+        if(forcePromoteCheck) forcePromoteCheck.checked = (data.status === "Promoted");
         document.getElementById("saveMarksBtn").textContent = "Update Marks";
     } else {
         document.getElementById("attendanceInput").value = "";
         document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
+        if(forcePromoteCheck) forcePromoteCheck.checked = false;
         document.getElementById("saveMarksBtn").textContent = "Save Marks";
     }
 });
@@ -386,12 +425,21 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     let marksData = {}, totalObtained = 0, isPassed = true, valid = true;
     let totalMaxPossible = 0;
     
+    const forcePromoteCheck = document.getElementById("forcePromoteCheck");
+    const isForcePromoted = forcePromoteCheck && forcePromoteCheck.checked;
+    
     classSubjects.forEach(sub => {
         totalMaxPossible += sub.maxMark;
         const inp = document.querySelector(`.mark-input[data-subject="${sub.name}"]`);
         const val = inp.value.trim().toUpperCase();
         
-        if (val === "") valid = false;
+        if (val === "") {
+            if(!isForcePromoted) {
+                valid = false;
+            } else {
+                marksData[sub.name] = "-"; // Force promote ആണെങ്കിൽ ഒഴിച്ചിട്ട ഫീൽഡുകൾ '-' ആക്കി മാറ്റുന്നു
+            }
+        }
         else if (val === "A") { marksData[sub.name] = "A"; isPassed = false; }
         else {
             const num = Number(val);
@@ -404,10 +452,18 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         }
     });
     
-    if (!valid) return alert("Please check marks inputs. Ensure they don't exceed Max Mark for each subject.");
+    // Force promote അല്ലെങ്കിൽ മാത്രം വാലിഡേഷൻ എറർ കാണിക്കും
+    if (!valid && !isForcePromoted) return alert("Please check marks inputs. Ensure they don't exceed Max Mark for each subject.");
     
     const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
-    const finalGrade = getGrade(percentage, isPassed);
+    let finalGrade = getGrade(percentage, isPassed);
+    let finalStatus = isPassed ? "Passed" : "Failed";
+
+    // Force Promote Validation (If checkbox is checked, save as Promoted and D+)
+    if (isForcePromoted) {
+        finalStatus = "Promoted";
+        finalGrade = "D+";
+    }
     
     document.getElementById("saveMarksBtn").textContent = "Saving...";
     try {
@@ -416,10 +472,12 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
             marks: marksData, attendance: document.getElementById("attendanceInput").value, 
             totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
             subjectConfig: classSubjects,
-            percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
+            percentage, grade: finalGrade, status: finalStatus
         });
         clearCache(`cache_marks_${assignedClass}`);
         alert("Marks saved!"); select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
+        if(forcePromoteCheck) forcePromoteCheck.checked = false;
+        loadResults();
     } catch (e) {}
     document.getElementById("saveMarksBtn").textContent = "Save Marks";
 });
@@ -605,7 +663,7 @@ async function loadResults() {
 
     if (results.length === 0) {
         document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:20px;">No results found for ${term}.</td></tr>`;
-        ['pdfTbody1', 'pdfTbody2', 'deskLabelsGrid'].forEach(id => document.getElementById(id).innerHTML = "");
+        ['pdfTbody1', 'pdfTbody2'].forEach(id => document.getElementById(id).innerHTML = "");
         return;
     }
     
@@ -622,7 +680,7 @@ async function loadResults() {
         return String(adA).localeCompare(String(adB), undefined, {numeric: true});
     });
     
-    let sBody = "", pBody1 = "", pBody2 = "", deskGrid = "";
+    let sBody = "", pBody1 = "", pBody2 = "";
     let bTot = 0, gTot = 0, bPass = 0, gPass = 0;
     let boyRoll = 1, girlRoll = 1;
     
@@ -635,7 +693,6 @@ async function loadResults() {
         
         const roll = gen === "Male" ? boyRoll++ : girlRoll++;
         const color = gen === "Female" ? "#d32f2f" : "#000000"; 
-        const deskBorderColor = gen === "Female" ? "#d32f2f" : "#000000";
         
         let marksHTMLScreen = "", marksHTMLPdf1 = "", marksHTMLPdf2 = "";
         
@@ -654,36 +711,29 @@ async function loadResults() {
         if (!displayGrade || displayGrade.includes("Failed") || displayGrade.toLowerCase() === "passed") {
             displayGrade = getGrade(res.percentage, res.status !== "Failed");
         }
+        if (res.status === "Promoted") displayGrade = "D+"; 
 
-        const statusText = res.status === "Failed" ? "FAILED" : "PASSED";
-        const statusColor = res.status === "Failed" ? "#d32f2f" : "#000000";
+        const statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
+        const statusColor = res.status === "Failed" ? "#d32f2f" : (res.status === "Promoted" ? "#16a34a" : "#000000"); 
+        const pdfPassText = statusText === "FAILED" ? "F" : (statusText === "PROMOTED" ? "PR" : "P");
 
         sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
             <td>${res.attendance || "-"}</td>${marksHTMLScreen}<td>${res.totalMarks}</td><td>${res.rank}</td><td style="font-weight:bold;">${displayGrade}</td>
-            <td style="color:${statusColor};">${statusText}</td>
+            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td>
             <td><button class="btn-custom btn-danger-custom btn-small" onclick="deleteMark('${res.id}', '${term}')">Del</button></td></tr>`;
             
         pBody1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
             <td>${res.attendance || ""}</td>${marksHTMLPdf1}<td>${res.totalMarks}</td><td>${res.rank !== "-" ? res.rank : ""}</td>
-            <td style="color:${statusColor};">${statusText === "FAILED" ? "F" : "P"}</td></tr>`;
+            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
             
         pBody2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
             <td>${res.attendance || ""}</td>${marksHTMLPdf2}<td>${res.totalMarks}</td><td>${res.rank !== "-" ? res.rank : ""}</td>
             <td style="font-weight:bold;">${displayGrade}</td><td style="color:${statusColor}; font-weight:bold;">${statusText}</td></tr>`;
-
-        deskGrid += `
-            <div class="desk-label-box" style="border-color: ${deskBorderColor}; color: ${color};">
-                <p>Roll No: ${roll}</p>
-                <p>Name: ${res.studentName.toUpperCase()}</p>
-                <p>Class: ${assignedClass.toUpperCase()}</p>
-            </div>
-        `;
     });
     
     document.getElementById("screenResultBody").innerHTML = sBody;
     document.getElementById("pdfTbody1").innerHTML = pBody1;
     document.getElementById("pdfTbody2").innerHTML = pBody2;
-    document.getElementById("deskLabelsGrid").innerHTML = deskGrid;
     
     document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
     document.getElementById("pdfPass1").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
@@ -713,13 +763,21 @@ async function loadPublishSettings(term) {
             const data = docSnap.data();
             document.getElementById("publishStatus").value = data.isPublished ? "published" : "hidden";
             document.getElementById("publishDateTime").value = data.publishDateTime || "";
-            statusText.textContent = data.isPublished ? "Current Status: Published (Visible to Students)" : "Current Status: Locked (Hidden from Students)";
-            statusText.style.color = data.isPublished ? "#0ea5e9" : "#ef4444";
+            
+            if(data.isPublished) {
+                if(data.publishDateTime && new Date(data.publishDateTime) > new Date()) {
+                    const dt = new Date(data.publishDateTime);
+                    statusText.innerHTML = `<span style="color:#f59e0b;">⏳ Status: Scheduled to Publish on ${dt.getDate()}-${dt.getMonth()+1}-${dt.getFullYear()} at ${dt.toLocaleTimeString()}</span>`;
+                } else {
+                    statusText.innerHTML = `<span style="color:#27ae60;">✅ Status: Published (Visible to Students)</span>`;
+                }
+            } else {
+                statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Hidden from Students)</span>`;
+            }
         } else {
             document.getElementById("publishStatus").value = "hidden";
             document.getElementById("publishDateTime").value = "";
-            statusText.textContent = "Current Status: Locked (Default)";
-            statusText.style.color = "#ef4444";
+            statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Default)</span>`;
         }
     } catch(e) {
         console.error("Error loading publish settings", e);
@@ -799,10 +857,8 @@ document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () =>
 
 // --- Copy Result Link ---
 document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
-    // റിസൾട്ട് പേജിന്റെ ലിങ്ക് ഉണ്ടാക്കുന്നു
     const resultUrl = `${window.location.origin}/result.html?mid=${madrasaUid}`;
     
-    // ലിങ്ക് ഡിവൈസിലേക്ക് കോപ്പി ചെയ്യുന്നു
     navigator.clipboard.writeText(resultUrl).then(() => {
         alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.");
     }).catch(err => {
