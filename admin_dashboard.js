@@ -50,11 +50,18 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- Copy Admission Link Logic ---
+// --- Copy Links Logic ---
 document.getElementById('copyAdmissionLinkBtn').addEventListener('click', () => {
     const admissionUrl = `${window.location.origin}/admission.html?mid=${adminUid}`;
     navigator.clipboard.writeText(admissionUrl).then(() => {
         alert("Admission Link Copied!\nShare this link via WhatsApp.");
+    });
+});
+
+document.getElementById('copyResultLinkBtn').addEventListener('click', () => {
+    const resultUrl = `${window.location.origin}/result.html?mid=${adminUid}`;
+    navigator.clipboard.writeText(resultUrl).then(() => {
+        alert("Result Link Copied!\nShare this link so students can view their results.");
     });
 });
 
@@ -87,9 +94,11 @@ async function loadMadrasaData() {
 function updateClassUI(classes) {
     classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
     const tClassSelect = document.getElementById('tClass');
+    const pubClassSelect = document.getElementById('adminPublishClass'); // Publish Dropdown
     const listContainer = document.getElementById('classListContainer');
 
     tClassSelect.innerHTML = '<option value="">Select a Class</option>';
+    if(pubClassSelect) pubClassSelect.innerHTML = '<option value="ALL">All Classes (Publish Together)</option>';
     listContainer.innerHTML = '';
 
     if (classes.length === 0) {
@@ -99,6 +108,7 @@ function updateClassUI(classes) {
 
     classes.forEach(cls => {
         tClassSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
+        if(pubClassSelect) pubClassSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
         const tagDiv = document.createElement('div');
         tagDiv.className = 'class-tag';
         tagDiv.innerHTML = `${cls} <div class="tag-close class-close" data-class="${cls}">x</div>`;
@@ -139,6 +149,95 @@ document.getElementById('addClassBtn').addEventListener('click', async () => {
         document.getElementById('newClassName').value = '';
         btn.innerText = "Add";
     } catch (error) { alert("Error adding class!"); btn.innerText = "Add"; }
+});
+
+
+// ------------------- ADMIN RESULT PUBLISH LOGIC -------------------
+document.getElementById('adminPublishTerm').addEventListener('change', loadAdminPublishStatus);
+document.getElementById('adminPublishClass').addEventListener('change', loadAdminPublishStatus);
+
+async function loadAdminPublishStatus() {
+    const term = document.getElementById('adminPublishTerm').value;
+    const cls = document.getElementById('adminPublishClass').value;
+    const statusDiv = document.getElementById('adminPublishStatusDisplay');
+
+    if (cls === "ALL") {
+        statusDiv.innerHTML = "<span style='color:#34495e;'>Select a specific class to view its current status. Saving now will apply settings to ALL classes.</span>";
+        document.getElementById("adminPublishStatus").value = "hidden";
+        document.getElementById("adminPublishDateTime").value = "";
+        return;
+    }
+
+    try {
+        const docSnap = await getDoc(doc(db, "publish_settings", `${adminUid}_${cls}_${term.replace(/\s+/g, '')}`));
+        if(docSnap.exists()) {
+            const data = docSnap.data();
+            document.getElementById("adminPublishStatus").value = data.isPublished ? "published" : "hidden";
+            document.getElementById("adminPublishDateTime").value = data.publishDateTime || "";
+
+            if(data.isPublished) {
+                if(data.publishDateTime && new Date(data.publishDateTime) > new Date()) {
+                    const dt = new Date(data.publishDateTime);
+                    statusDiv.innerHTML = `<span style="color:#f59e0b;">⏳ Status: Scheduled to Publish on ${dt.getDate()}-${dt.getMonth()+1}-${dt.getFullYear()} at ${dt.toLocaleTimeString()}</span>`;
+                } else {
+                    statusDiv.innerHTML = `<span style="color:#27ae60;">✅ Status: Published (Visible to Students)</span>`;
+                }
+            } else {
+                statusDiv.innerHTML = `<span style="color:#e74c3c;">🔒 Status: Locked (Hidden from Students)</span>`;
+            }
+        } else {
+            document.getElementById("adminPublishStatus").value = "hidden";
+            document.getElementById("adminPublishDateTime").value = "";
+            statusDiv.innerHTML = `<span style="color:#e74c3c;">🔒 Status: Locked (Default)</span>`;
+        }
+    } catch(e) { 
+        statusDiv.innerHTML = ""; 
+    }
+}
+
+document.getElementById('adminSavePublishBtn').addEventListener('click', async () => {
+    const term = document.getElementById('adminPublishTerm').value;
+    const clsSelection = document.getElementById('adminPublishClass').value;
+    const dt = document.getElementById('adminPublishDateTime').value;
+    const isPub = document.getElementById('adminPublishStatus').value === 'published';
+
+    let classesToUpdate = [];
+    if (clsSelection === "ALL") {
+        classesToUpdate = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
+    } else {
+        classesToUpdate = [clsSelection];
+    }
+
+    if(classesToUpdate.length === 0) return alert("No classes available to update.");
+
+    const btn = document.getElementById('adminSavePublishBtn');
+    const originalText = btn.innerText;
+    btn.innerText = "Saving...";
+    
+    try {
+        const promises = classesToUpdate.map(cls => {
+            const docId = `${adminUid}_${cls}_${term.replace(/\s+/g, '')}`;
+            return setDoc(doc(db, "publish_settings", docId), {
+                madrasaUid: adminUid,
+                className: cls,
+                term: term,
+                isPublished: isPub,
+                publishDateTime: dt
+            });
+        });
+        
+        await Promise.all(promises);
+        
+        document.getElementById('adminPublishStatusDisplay').innerHTML = `<span style="color:#27ae60;">✅ Status Updated Successfully!</span>`;
+        
+        if (clsSelection !== "ALL") {
+            setTimeout(loadAdminPublishStatus, 2000);
+        }
+
+    } catch(e) { 
+        alert("Error saving settings."); 
+    }
+    btn.innerText = originalText;
 });
 
 

@@ -25,6 +25,7 @@
         button.action-btn { background-color: #27ae60; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; }
         button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; }
         button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; }
+        button.btn-warning { background-color: #f39c12; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 500px; }
         .table-responsive { overflow-x: auto; }
@@ -69,8 +70,7 @@
                     <input type="text" id="tcAdnoSearch" placeholder="Enter Admission No" style="margin: 0;">
                     <button class="action-btn" id="searchTcBtn" style="width: auto; padding: 10px 20px; background-color: #34495e;">Search</button>
                 </div>
-                <div id="tcStudentDetails">
-                    </div>
+                <div id="tcStudentDetails"></div>
             </div>
 
             <div class="card">
@@ -110,6 +110,49 @@
                             <tr><td colspan="5" style="text-align: center;">Loading data...</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div class="card" style="border-top: 4px solid #f39c12;">
+                <h3>
+                    Result Publish Management
+                    <button id="copyResultLinkBtn" class="btn-small btn-green">🔗 Copy Result Link</button>
+                </h3>
+                <p style="font-size: 13px; color: #666; margin-top:0;">Control when students can view their results. Select 'ALL' to update all classes at once.</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="font-size: 13px; color: #555; font-weight: bold;">Select Term</label>
+                        <select id="adminPublishTerm" style="margin-bottom: 5px;">
+                            <option value="Monthly Test">Monthly Test</option>
+                            <option value="Quarterly Exam">Quarterly Exam</option>
+                            <option value="Half Yearly Exam">Half Yearly Exam</option>
+                            <option value="Annual Exam">Annual Exam</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 13px; color: #555; font-weight: bold;">Select Class</label>
+                        <select id="adminPublishClass" style="margin-bottom: 5px;">
+                            <option value="ALL">All Classes (Publish Together)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 13px; color: #555; font-weight: bold;">Current Status</label>
+                        <select id="adminPublishStatus" style="margin-bottom: 5px;">
+                            <option value="hidden">Locked / Hidden</option>
+                            <option value="published">Published / Visible</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 13px; color: #555; font-weight: bold;">Schedule Date & Time</label>
+                        <input type="datetime-local" id="adminPublishDateTime" style="margin-bottom: 5px;">
+                    </div>
+                </div>
+                
+                <button class="action-btn btn-warning" id="adminSavePublishBtn" style="margin-top: 10px;">Save Publish Settings</button>
+                
+                <div id="adminPublishStatusDisplay" style="margin-top: 15px; font-weight: bold; font-size: 15px; padding: 10px; border-radius: 5px; background: #f8fafc; border: 1px solid #ddd;">
+                    Select a specific class to view its current status.
                 </div>
             </div>
 
