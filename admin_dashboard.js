@@ -498,7 +498,7 @@ createBtn.addEventListener('click', async () => {
     }
 });
 
-// ടീച്ചർമാരുടെ ലിസ്റ്റ് ലോഡ് ചെയ്യുന്ന ഫംഗ്ഷൻ
+// ടീച്ചർമാരുടെ ലിസ്റ്റ് ലോഡ് ചെയ്യുന്ന ഫംഗ്ഷൻ (ക്ലാസ്സ് അനുസരിച്ച് ഓർഡറിൽ)
 async function loadTeachers() {
     const tbody = document.getElementById('teacherTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>';
@@ -511,11 +511,24 @@ async function loadTeachers() {
 
         if(querySnapshot.empty) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
 
+        // 1. ഡാറ്റ ഒരു അറേയിലേക്ക് (Array) മാറ്റുന്നു
+        let teachersArray = [];
         querySnapshot.forEach((documentSnapshot) => {
             const data = documentSnapshot.data();
-            const tId = documentSnapshot.id;
-            teachersDataList[tId] = data; 
+            data.id = documentSnapshot.id; // Edit/Delete ചെയ്യാൻ ID സേവ് ചെയ്യുന്നു
+            teachersArray.push(data);
+            teachersDataList[data.id] = data; 
+        });
 
+        // 2. ക്ലാസ്സ് അനുസരിച്ച് ഓർഡർ ചെയ്യുന്നു (Class 1, 2, 10, A, B എന്നിങ്ങനെ)
+        teachersArray.sort((a, b) => {
+            const classA = a.assignedClass || "";
+            const classB = b.assignedClass || "";
+            return classA.localeCompare(classB, undefined, {numeric: true, sensitivity: 'base'});
+        });
+
+        // 3. ഓർഡർ ചെയ്ത ലിസ്റ്റ് ടേബിളിലേക്ക് പ്രിൻ്റ് ചെയ്യുന്നു
+        teachersArray.forEach((data) => {
             const displayMobile = data.mobile || data.email; 
 
             const tr = document.createElement('tr');
@@ -524,13 +537,14 @@ async function loadTeachers() {
                 <td>${displayMobile}</td>
                 <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
                 <td>
-                    <button class="btn-small edit-t-btn" data-id="${tId}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
-                    <button class="btn-small btn-red delete-btn" data-id="${tId}">Remove</button>
+                    <button class="btn-small edit-t-btn" data-id="${data.id}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
+                    <button class="btn-small btn-red delete-btn" data-id="${data.id}">Remove</button>
                 </td>
             `;
             tbody.appendChild(tr);
         });
 
+        // Edit ബട്ടൺ വർക്ക് ചെയ്യാൻ
         document.querySelectorAll('.edit-t-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const tId = e.target.getAttribute('data-id');
@@ -552,6 +566,7 @@ async function loadTeachers() {
             });
         });
 
+        // Delete ബട്ടൺ വർക്ക് ചെയ്യാൻ
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const tId = e.target.getAttribute('data-id');
@@ -563,27 +578,3 @@ async function loadTeachers() {
         });
     } catch (error) { console.error("Error loading teachers:", error); }
 }
-
-document.getElementById('saveTeacherEditBtn').addEventListener('click', async () => {
-    const tId = document.getElementById('editTeacherId').value;
-    const newName = document.getElementById('editTeacherName').value.trim();
-    const newClass = document.getElementById('editTeacherClass').value;
-
-    if(!newName || !newClass) return alert("Name and Class are required!");
-
-    const btn = document.getElementById('saveTeacherEditBtn');
-    btn.innerText = "Saving...";
-
-    try {
-        await updateDoc(doc(db, "users", tId), {
-            name: newName,
-            assignedClass: newClass
-        });
-        document.getElementById('editTeacherModal').classList.add('hidden');
-        alert("Teacher details updated successfully!");
-        loadTeachers(); 
-    } catch(e) {
-        alert("Error updating teacher.");
-    }
-    btn.innerText = "Save Changes";
-});
