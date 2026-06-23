@@ -24,9 +24,10 @@ const db = getFirestore(app);
 let adminUid = "";
 let madrasaIdCode = "";
 
-// Global variables for TC processing
+// Global variables
 window.currentTcStudent = null;
 window.currentTcStudentId = null;
+let teachersDataList = {};
 
 function formatDate(dateStr) {
     if (!dateStr) return "-";
@@ -65,7 +66,7 @@ document.getElementById('copyResultLinkBtn').addEventListener('click', () => {
     });
 });
 
-// 1. Load Madrasa Data and Classes
+// --- 1. Load Madrasa Data ---
 async function loadMadrasaData() {
     const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses'));
     const cachedName = localStorage.getItem('madrasaName');
@@ -94,7 +95,7 @@ async function loadMadrasaData() {
 function updateClassUI(classes) {
     classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
     const tClassSelect = document.getElementById('tClass');
-    const pubClassSelect = document.getElementById('adminPublishClass'); // Publish Dropdown
+    const pubClassSelect = document.getElementById('adminPublishClass'); 
     const listContainer = document.getElementById('classListContainer');
 
     tClassSelect.innerHTML = '<option value="">Select a Class</option>';
@@ -152,7 +153,7 @@ document.getElementById('addClassBtn').addEventListener('click', async () => {
 });
 
 
-// ------------------- ADMIN RESULT PUBLISH LOGIC -------------------
+// --- 2. ADMIN RESULT PUBLISH LOGIC ---
 document.getElementById('adminPublishTerm').addEventListener('change', loadAdminPublishStatus);
 document.getElementById('adminPublishClass').addEventListener('change', loadAdminPublishStatus);
 
@@ -241,7 +242,7 @@ document.getElementById('adminSavePublishBtn').addEventListener('click', async (
 });
 
 
-// ------------------- PENDING ADMISSIONS SECTION -------------------
+// --- 3. PENDING ADMISSIONS SECTION ---
 async function loadPendingAdmissions() {
     const tbody = document.getElementById('pendingAdmissionsBody');
     try {
@@ -300,7 +301,7 @@ window.rejectAdmission = async (docId) => {
 };
 
 
-// ------------------- TC (TRANSFER CERTIFICATE) SECTION -------------------
+// --- 4. TC (TRANSFER CERTIFICATE) SECTION ---
 document.getElementById('searchTcBtn').addEventListener('click', async () => {
     const adNo = document.getElementById('tcAdnoSearch').value.trim();
     if(!adNo) return alert("Enter Admission Number");
@@ -409,37 +410,95 @@ window.generateTCAndRemove = async () => {
     });
 };
 
-// ------------------- TEACHERS SECTION -------------------
+// --- 5. TEACHERS SECTION (Smart Auto-Versioning) ---
+
 const createBtn = document.getElementById('createTeacherBtn');
 createBtn.addEventListener('click', async () => {
-    const tName = document.getElementById('tName').value;
-    const tEmail = document.getElementById('tEmail').value;
+    const tName = document.getElementById('tName').value.trim();
+    const tMobile = document.getElementById('tMobile').value.trim();
     const tPassword = document.getElementById('tPassword').value;
     const tClass = document.getElementById('tClass').value;
 
-    if(!tName || !tEmail || !tPassword || !tClass) return alert("Please fill in all details!");
+    if(!tName || !tMobile || !tPassword || !tClass) return alert("Please fill in all details!");
+    
+    if(!madrasaIdCode || madrasaIdCode.trim() === "") {
+        return alert("Error: ഈ മദ്രസയ്ക്ക് 'Madrasa ID' ലഭ്യമല്ല!\n\nസൂപ്പർ അഡ്മിൻ പാനലിൽ പോയി ഈ മദ്രസയെ Edit ചെയ്ത് ഒരു ID (ഉദാ: 1050) നൽകിയ ശേഷം മാത്രം ഉസ്താദുമാരെ ആഡ് ചെയ്യുക.");
+    }
+
     createBtn.innerText = "Adding...";
 
-    try {
-        const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
-        const secondaryAuth = getAuth(secondaryApp);
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, tEmail, tPassword);
-        const newUid = userCredential.user.uid;
+    const cleanMobile = tMobile.replace(/[^0-9]/g, ''); 
+    const cleanMadrasaId = madrasaIdCode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); 
 
+    if(!cleanMobile || cleanMobile.length < 10) {
+        createBtn.innerText = "Add Teacher";
+        return alert("ദയവായി കൃത്യമായ 10 അക്ക മൊബൈൽ നമ്പർ നൽകുക!");
+    }
+
+    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+    const secondaryAuth = getAuth(secondaryApp);
+    
+    // ഈ നമ്പറിൽ അക്കൗണ്ട് ഉണ്ടെങ്കിൽ സിസ്റ്റം തനിയെ v2, v3 എന്നിങ്ങനെ പേര് മാറ്റി സേവ് ചെയ്യും
+    const suffixes = ["", "v2.", "v3.", "v4.", "v5.", "v6.", "v7.", "v8."];
+    let newUid = "";
+    let successfulEmail = "";
+    let created = false;
+
+    for (let suffix of suffixes) {
+        const dummyEmail = `${cleanMobile}@${suffix}${cleanMadrasaId}.com`;
+        try {
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, dummyEmail, tPassword);
+            newUid = userCredential.user.uid;
+            successfulEmail = dummyEmail;
+            created = true;
+            break; // അക്കൗണ്ട് ക്രിയേറ്റ് ആയാൽ ലൂപ്പ് നിർത്തുന്നു
+        } catch (error) {
+            if (error.code === 'auth/email-already-in-use') {
+                continue; // നമ്പർ ഉപയോഗിച്ചിട്ടുണ്ടെങ്കിൽ തനിയെ അടുത്ത വേർഷനിലേക്ക് മാറും
+            } else {
+                await signOut(secondaryAuth);
+                createBtn.innerText = "Add Teacher";
+                return alert("Error: " + error.message);
+            }
+        }
+    }
+
+    if (!created) {
+        await signOut(secondaryAuth);
+        createBtn.innerText = "Add Teacher";
+        return alert("Error: ഈ ഉസ്താദിനെ ഒരുപാട് തവണ റിമൂവ് ചെയ്ത് ആഡ് ചെയ്തിട്ടുണ്ട്.");
+    }
+
+    try {
         await setDoc(doc(db, "users", newUid), {
-            name: tName, email: tEmail, role: "teacher", assignedClass: tClass, madrasaUid: adminUid, madrasaId: madrasaIdCode
+            name: tName, 
+            mobile: cleanMobile, // പത്ത് അക്ക നമ്പർ മാത്രം ഡാറ്റാബേസിൽ സേവ് ആവും
+            email: successfulEmail, 
+            role: "teacher", 
+            assignedClass: tClass, 
+            madrasaUid: adminUid, 
+            madrasaId: madrasaIdCode
         });
 
         await signOut(secondaryAuth);
         alert("Teacher Added Successfully!");
         createBtn.innerText = "Add Teacher";
         
-        document.getElementById('tName').value = ''; document.getElementById('tEmail').value = '';
-        document.getElementById('tPassword').value = ''; document.getElementById('tClass').value = '';
+        document.getElementById('tName').value = ''; 
+        document.getElementById('tMobile').value = '';
+        document.getElementById('tPassword').value = ''; 
+        document.getElementById('tClass').value = '';
+        
         loadTeachers(); 
-    } catch (error) { alert("Error: " + error.message); createBtn.innerText = "Add Teacher"; }
+        
+    } catch (error) { 
+        console.error("Firebase Auth Error:", error);
+        alert("Error saving data: " + error.message); 
+        createBtn.innerText = "Add Teacher"; 
+    }
 });
 
+// ടീച്ചർമാരുടെ ലിസ്റ്റ് ലോഡ് ചെയ്യുന്ന ഫംഗ്ഷൻ
 async function loadTeachers() {
     const tbody = document.getElementById('teacherTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>';
@@ -448,24 +507,83 @@ async function loadTeachers() {
         const querySnapshot = await getDocs(q);
         
         tbody.innerHTML = '';
+        teachersDataList = {}; 
+
         if(querySnapshot.empty) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
 
         querySnapshot.forEach((documentSnapshot) => {
             const data = documentSnapshot.data();
+            const tId = documentSnapshot.id;
+            teachersDataList[tId] = data; 
+
+            const displayMobile = data.mobile || data.email; 
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${data.name}</td><td>${data.email}</td>
+                <td>${data.name}</td>
+                <td>${displayMobile}</td>
                 <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
-                <td><button class="btn-small btn-red delete-btn" data-id="${documentSnapshot.id}">Remove</button></td>
+                <td>
+                    <button class="btn-small edit-t-btn" data-id="${tId}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
+                    <button class="btn-small btn-red delete-btn" data-id="${tId}">Remove</button>
+                </td>
             `;
             tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.edit-t-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tId = e.target.getAttribute('data-id');
+                const tData = teachersDataList[tId];
+                
+                document.getElementById('editTeacherId').value = tId;
+                document.getElementById('editTeacherName').value = tData.name;
+                document.getElementById('editTeacherMobile').value = tData.mobile || tData.email;
+
+                const classSelect = document.getElementById('editTeacherClass');
+                const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
+                classSelect.innerHTML = '<option value="">Select a Class</option>';
+                cachedClasses.forEach(cls => {
+                    const isSelected = (cls === tData.assignedClass) ? "selected" : "";
+                    classSelect.innerHTML += `<option value="${cls}" ${isSelected}>${cls}</option>`;
+                });
+                
+                document.getElementById('editTeacherModal').classList.remove('hidden');
+            });
         });
 
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const tId = e.target.getAttribute('data-id');
-                if(confirm("Are you sure you want to remove this teacher?")) { await deleteDoc(doc(db, "users", tId)); loadTeachers(); }
+                if(confirm("Are you sure you want to remove this teacher?")) { 
+                    await deleteDoc(doc(db, "users", tId)); 
+                    loadTeachers(); 
+                }
             });
         });
     } catch (error) { console.error("Error loading teachers:", error); }
 }
+
+document.getElementById('saveTeacherEditBtn').addEventListener('click', async () => {
+    const tId = document.getElementById('editTeacherId').value;
+    const newName = document.getElementById('editTeacherName').value.trim();
+    const newClass = document.getElementById('editTeacherClass').value;
+
+    if(!newName || !newClass) return alert("Name and Class are required!");
+
+    const btn = document.getElementById('saveTeacherEditBtn');
+    btn.innerText = "Saving...";
+
+    try {
+        await updateDoc(doc(db, "users", tId), {
+            name: newName,
+            assignedClass: newClass
+        });
+        document.getElementById('editTeacherModal').classList.add('hidden');
+        alert("Teacher details updated successfully!");
+        loadTeachers(); 
+    } catch(e) {
+        alert("Error updating teacher.");
+    }
+    btn.innerText = "Save Changes";
+});

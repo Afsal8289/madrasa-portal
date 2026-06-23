@@ -22,14 +22,12 @@
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .card h3 { margin-top: 0; color: #2c3e50; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
         
-        /* Form control ഡിസൈൻ ടീച്ചർ പാനലിലേത് പോലെ തന്നെ ഇവിടെയും സെറ്റ് ചെയ്തു */
         input, select, .form-control { width: 100%; padding: 12px 15px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; font-family: 'Poppins', sans-serif;}
         .form-control:focus { outline: none; border-color: #3498db; }
 
         button.action-btn { background-color: #27ae60; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; }
         button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; }
-        button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; }
-        button.btn-warning { background-color: #f39c12; }
+        button.btn-blue { background-color: #3498db; } button.btn-green { background-color: #2ecc71; } button.btn-red { background-color: #e74c3c; } button.btn-warning { background-color: #f39c12; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 500px; }
         .table-responsive { overflow-x: auto; }
@@ -44,6 +42,12 @@
 
         .publish-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; }
         @media (max-width: 576px) { .publish-grid { grid-template-columns: 1fr; } }
+
+        /* Edit Modal Styles */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+        .modal-content h3 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #f0f4f8; padding-bottom: 10px; margin-bottom: 15px;}
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -83,7 +87,7 @@
             <div class="card">
                 <h3>Add New Teacher</h3>
                 <input type="text" id="tName" placeholder="Teacher Name">
-                <input type="email" id="tEmail" placeholder="Teacher Email (Login ID)">
+                <input type="number" id="tMobile" placeholder="Teacher Mobile Number (Login ID)">
                 <input type="text" id="tPassword" placeholder="Create Password">
                 
                 <label style="font-size: 13px; color: #555;">Assign Class</label>
@@ -172,7 +176,7 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Email</th>
+                                <th>Mobile Number</th>
                                 <th>Class Assigned</th>
                                 <th>Action</th>
                             </tr>
@@ -186,6 +190,29 @@
 
         </div>
 
+    </div>
+
+    <div id="editTeacherModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Teacher Details</h3>
+            <input type="hidden" id="editTeacherId">
+            
+            <label style="font-size: 12px; font-weight: bold; color: #666;">Teacher Name</label>
+            <input type="text" id="editTeacherName" class="form-control">
+            
+            <label style="font-size: 12px; font-weight: bold; color: #666;">Mobile Number</label>
+            <input type="text" id="editTeacherMobile" class="form-control" disabled style="background-color: #e9ecef; cursor: not-allowed; color: #666;">
+            <p style="font-size: 11px; color: #e74c3c; margin-top: -10px; margin-bottom: 10px;">*ലോഗിൻ ചെയ്യാൻ ഉപയോഗിക്കുന്നതിനാൽ മൊബൈൽ നമ്പർ ഇവിടെ മാറ്റാൻ സാധിക്കില്ല. മാറ്റണമെങ്കിൽ പുതിയതായി ആഡ് ചെയ്യുക.</p>
+            
+            <label style="font-size: 12px; font-weight: bold; color: #666;">Assign New Class</label>
+            <select id="editTeacherClass" class="form-control">
+                </select>
+            
+            <div style="display:flex; gap:10px; margin-top: 15px;">
+                <button class="action-btn" id="saveTeacherEditBtn">Save Changes</button>
+                <button class="action-btn" style="background:#e74c3c;" onclick="document.getElementById('editTeacherModal').classList.add('hidden')">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <div style="position: absolute; left: -9999px; top: 0;">

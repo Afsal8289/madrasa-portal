@@ -6,27 +6,109 @@
     <title>Madrasa Portal - Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* ലോഗിൻ ടാബുകൾക്കുള്ള പുതിയ ഡിസൈൻ */
+        .tab-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 12px; border: none; background: #e2e8f0; border-radius: 8px; cursor: pointer; font-weight: 600; color: #64748b; font-family: 'Poppins', sans-serif; transition: 0.3s; }
+        .tab-btn.active { background: #2c3e50; color: white; }
+        .login-form { display: flex; flex-direction: column; gap: 15px; }
+        .input-group { position: relative; width: 100%; }
+        .input-group input { width: 100%; padding: 12px; padding-right: 40px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-family: 'Poppins', sans-serif; font-size: 14px; }
+        .input-group input:focus { outline: none; border-color: #3498db; }
+        button[id^="login"] { background: #3498db; color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: 'Poppins', sans-serif; font-size: 15px; transition: 0.3s; }
+        button[id^="login"]:hover { background: #2980b9; }
+        .hidden { display: none !important; }
+        
+        /* കണ്ണ് ഐക്കൺ ഡിസൈൻ */
+        .toggle-password {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            font-size: 16px;
+            user-select: none;
+            opacity: 0.7;
+        }
+        .toggle-password:hover { opacity: 1; }
+    </style>
 </head>
 <body>
 
-    <div class="login-container">
-        <h2>Madrasa Portal</h2>
-        <p>Please log in to your account</p>
+    <div class="login-container" style="background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; margin: auto; margin-top: 50px; text-align: center;">
+        <h2 style="margin-top: 0; color: #2c3e50;">Madrasa Portal</h2>
+        <p style="color: #64748b; font-size: 14px; margin-bottom: 25px;">Please select your role to log in</p>
         
-        <div class="input-group">
-            <input type="email" id="email" placeholder="Email Address" required>
-        </div>
-        
-        <div class="input-group">
-            <input type="password" id="password" placeholder="Password" required>
+        <!-- Tabs -->
+        <div class="tab-container">
+            <button class="tab-btn active" id="tabTeacher">Teacher</button>
+            <button class="tab-btn" id="tabAdmin">Admin</button>
         </div>
 
-        <button id="loginBtn">Login</button>
+        <!-- 1. Teacher Login Form -->
+        <div id="teacherForm" class="login-form">
+            <div class="input-group">
+                <input type="text" id="tMadrasaId" placeholder="Madrasa ID (e.g. 1050)" required>
+            </div>
+            <div class="input-group">
+                <input type="number" id="tMobile" placeholder="Mobile Number" required>
+            </div>
+            <div class="input-group">
+                <input type="password" id="tPassword" placeholder="Password" required>
+                <span class="toggle-password" onclick="togglePassword('tPassword', this)">👁️</span>
+            </div>
+            <button id="loginTeacherBtn">Login as Teacher</button>
+        </div>
+
+        <!-- 2. Admin Login Form -->
+        <div id="adminForm" class="login-form hidden">
+            <div class="input-group">
+                <input type="email" id="email" placeholder="Admin Email" required>
+            </div>
+            <div class="input-group">
+                <input type="password" id="password" placeholder="Password" required>
+                <span class="toggle-password" onclick="togglePassword('password', this)">👁️</span>
+            </div>
+            <button id="loginAdminBtn">Login as Admin</button>
+        </div>
         
-        <p id="errorMessage"></p>
+        <p id="errorMessage" style="color: #e74c3c; font-size: 13px; margin-top: 15px; font-weight: 600;"></p>
     </div>
+
+    <!-- UI Toggle Script -->
+    <script>
+        // Tab മാറ്റാനുള്ള കോഡ്
+        const tabTeacher = document.getElementById('tabTeacher');
+        const tabAdmin = document.getElementById('tabAdmin');
+        const teacherForm = document.getElementById('teacherForm');
+        const adminForm = document.getElementById('adminForm');
+        const errorMsg = document.getElementById('errorMessage');
+
+        tabTeacher.addEventListener('click', () => {
+            tabTeacher.classList.add('active'); tabAdmin.classList.remove('active');
+            teacherForm.classList.remove('hidden'); adminForm.classList.add('hidden');
+            errorMsg.innerText = '';
+        });
+
+        tabAdmin.addEventListener('click', () => {
+            tabAdmin.classList.add('active'); tabTeacher.classList.remove('active');
+            adminForm.classList.remove('hidden'); teacherForm.classList.add('hidden');
+            errorMsg.innerText = '';
+        });
+
+        // പാസ്‌വേർഡ് കാണാനും മറയ്ക്കാനുമുള്ള ഫംഗ്ഷൻ
+        function togglePassword(inputId, iconElement) {
+            const inputField = document.getElementById(inputId);
+            if (inputField.type === "password") {
+                inputField.type = "text";
+                iconElement.innerText = "🙈"; // പാസ്‌വേർഡ് കാണുമ്പോൾ ഐക്കൺ മാറും
+            } else {
+                inputField.type = "password";
+                iconElement.innerText = "👁️";
+            }
+        }
+    </script>
     
-    <!-- ഫയർബേസ് കോഡുകൾ എല്ലാം app.js-ൽ ഉള്ളതുകൊണ്ട് ഈ ഒറ്റ വരി മാത്രം മതി -->
     <script type="module" src="app.js"></script>
 
 </body>
