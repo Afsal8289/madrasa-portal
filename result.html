@@ -1,132 +1,534 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Result Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { font-family: 'Roboto', sans-serif; background-color: #f1f5f9; color: #334155; }
-        .result-container { max-width: 650px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .header-text { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-        .header-text h2 { color: #0f172a; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; font-size: 24px; }
-        .header-text p { color: #64748b; margin: 0; font-weight: 500;}
-        
-        .form-group { margin-bottom: 20px; }
-        .form-group label { font-weight: 500; color: #475569; margin-bottom: 8px; display: block; font-size: 14px;}
-        .form-control { border-radius: 8px; padding: 12px; border: 1px solid #cbd5e1; background-color: #f8fafc; font-size: 15px;}
-        .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-        
-        .btn-submit { background-color: #3b82f6; color: white; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; border: none; font-size: 16px; transition: all 0.2s; margin-top: 10px;}
-        .btn-submit:hover { background-color: #2563eb; }
-        
-        #resultCard { display: none; margin-top: 30px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-        .student-info { background-color: #f8fafc; padding: 15px; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between;}
-        .student-info p { margin: 0; font-size: 14px; color: #475569;}
-        .student-info span { font-weight: 700; color: #0f172a; font-size: 15px;}
-        
-        .marks-table { width: 100%; border-collapse: collapse; }
-        .marks-table th, .marks-table td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-        .marks-table th { background-color: #f1f5f9; font-weight: 600; color: #475569; font-size: 14px;}
-        
-        .summary-box { display: flex; justify-content: space-between; background-color: #0f172a; color: white; padding: 15px; text-align: center; flex-wrap: wrap; gap: 10px;}
-        .summary-item { flex: 1; min-width: 80px;}
-        .summary-item h4 { margin: 0; font-size: 22px; font-weight: 700; }
-        .summary-item p { margin: 0; font-size: 12px; opacity: 0.8; text-transform: uppercase; }
-        
-        .status-passed { color: #16a34a; font-weight: bold; }
-        .status-failed { color: #dc2626; font-weight: bold; }
-        
-        .error-msg { display: none; color: #dc2626; background: #fee2e2; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; border: 1px solid #fecaca; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Madrasa Exam Result</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="icon" href="data:,">
+  
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0; font-family: 'Plus Jakarta Sans', sans-serif;
+      background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 20px 10px; color: #0f172a;
+    }
+
+    .main-wrapper { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+
+    @keyframes fadeInScale {
+      0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .card {
+      background: #ffffff; width: 100%; max-width: 420px; border-radius: 20px;
+      box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0,0,0,0.05);
+      overflow: hidden; animation: fadeInScale 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .header-bg {
+      background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+      color: #ffffff; padding: 30px 20px 35px; text-align: center;
+      position: relative; z-index: 1;
+    }
+    .header-bg.result-mode { padding: 20px 15px 25px; } /* Small padding for result view */
+
+    .header-bg::before {
+      content: ''; position: absolute; top: -20px; left: -20px;
+      width: 80px; height: 80px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%); z-index: -1;
+    }
+    .header-bg::after {
+      content: ''; position: absolute; bottom: -30px; right: -10px;
+      width: 100px; height: 100px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%); z-index: -1;
+    }
+
+    .m-icon { font-size: 26px; color: #c7d2fe; margin-bottom: 8px; text-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .m-name { margin: 0 0 6px 0; font-size: 20px; font-weight: 800; line-height: 1.3; white-space: normal; word-wrap: break-word; }
+    
+    .subtitle, .exam-badge {
+      display: inline-block; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px);
+      color: #ffffff; padding: 4px 12px; border-radius: 15px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    .exam-badge { font-size: 10px; }
+
+    .content-area {
+      padding: 20px; background: #ffffff; border-radius: 20px 20px 0 0;
+      margin-top: -20px; position: relative; z-index: 2;
+    }
+    .content-area.result-mode { padding: 15px; margin-top: -15px; }
+
+    /* Search Form Styles */
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; }
+    .input-wrapper { position: relative; }
+    .input-wrapper i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px; }
+    
+    input, select {
+      width: 100%; padding: 12px 14px 12px 38px; border-radius: 12px; border: 1px solid #e2e8f0;
+      background: #f8fafc; font-size: 13px; font-weight: 600; color: #1e293b; box-sizing: border-box;
+      transition: all 0.2s ease; appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E");
+      background-repeat: no-repeat; background-position: right 14px top 50%; background-size: 10px auto;
+    }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; background: #ffffff; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+    .btn-group-search { margin-top: 20px; }
+    button.view {
+      width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 13px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: #1e293b; color: #ffffff; box-shadow: 0 4px 10px rgba(30, 41, 59, 0.2); transition: all 0.2s;
+    }
+    button.view:hover { background: #0f172a; transform: translateY(-1px); }
+
+    /* Result Card Styles (New Premium Look) */
+    .student-box {
+      background: #ffffff; border: 1px solid #f1f5f9; box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+      border-radius: 12px; padding: 12px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;
+    }
+    .s-info-item { display: flex; flex-direction: column; gap: 2px;}
+    .s-label { font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; }
+    .s-label i { color: #cbd5e1; }
+    .s-value { font-size: 13px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+
+    .marks-wrapper { border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; margin-bottom: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+    td { padding: 8px 12px; font-size: 12px; font-weight: 600; color: #334155; border-bottom: 1px solid #f1f5f9; transition: background 0.2s ease; }
+    tbody tr:hover td { background: #f8fafc; }
+    tr:last-child td { border-bottom: none; }
+    .td-center { text-align: right; font-weight: 800; color: #0f172a;}
+
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 15px; }
+    .stat-item { border: 1px solid transparent; padding: 10px 4px; border-radius: 12px; text-align: center; }
+    .stat-total { background: #eff6ff; border-color: #dbeafe; }
+    .stat-rank { background: #f5f3ff; border-color: #ede9fe; }
+    .stat-grade { background: #fdf2f8; border-color: #fce7f3; }
+    .stat-status { background: #f8fafc; border-color: #f1f5f9; }
+
+    .st-lbl { display: block; font-size: 8px; color: #64748b; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;}
+    .st-val { font-size: 13px; font-weight: 800; }
+    .val-blue { color: #2563eb; }
+    .val-purple { color: #7c3aed; }
+    .val-pink { color: #db2777; }
+    .status-pass { color: #059669; }
+    .status-fail { color: #dc2626; }
+    .status-prom { color: #0284c7; }
+
+    .btn-group-result { display: flex; gap: 8px; }
+    .btn-result { flex: 1; padding: 12px; border: none; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
+    .btn-back { background: #f1f5f9; color: #475569; }
+    .btn-back:hover { background: #e2e8f0; }
+    .btn-img { background: #1e293b; color: #ffffff; box-shadow: 0 4px 10px rgba(30, 41, 59, 0.2); }
+    .btn-img:hover { background: #0f172a; box-shadow: 0 4px 12px rgba(30, 41, 59, 0.3); }
+    .hide-for-capture { display: none !important; }
+
+    /* Other elements */
+    #invalidLinkMsg { display: none; text-align: center; color: #ef4444; font-weight: 700; background: #fee2e2; padding: 15px; border-radius: 12px; border: 1px solid #f87171; width: 100%; max-width: 420px; margin-bottom: 20px;}
+    .footer { text-align: center; font-size: 11px; font-weight: 600; color: #64748b; margin-top: 20px; }
+    
+    #comingSoonCard { text-align: center; padding: 40px 20px; display: none; }
+    .cs-icon { font-size: 45px; color: #fbbf24; margin-bottom: 15px; filter: drop-shadow(0 4px 6px rgba(251, 191, 36, 0.3));}
+    .cs-title { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #1e293b;}
+    .cs-desc { font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 25px;}
+  </style>
 </head>
 <body>
 
-    <div class="result-container">
-        <div class="header-text">
-            <h2 id="madrasaNameDisplay">Loading...</h2>
-            <p>Madrasa Result Portal</p>
-        </div>
+<div class="main-wrapper">
+  
+  <div id="invalidLinkMsg">
+    <i class="fas fa-exclamation-triangle"></i> Invalid Link! Please use the correct link provided by your Madrasa.
+  </div>
 
-        <div id="searchSection">
-            <form id="resultForm">
-                <div class="row">
-                    <div class="col-md-6 form-group">
-                        <label>Select Exam Term</label>
-                        <select id="examTerm" class="form-control" required>
-                            <option value="Monthly Test">Monthly Test</option>
-                            <option value="Quarterly Exam">Quarterly Exam</option>
-                            <option value="Half Yearly Exam">Half Yearly Exam</option>
-                            <option value="Annual Exam">Annual Exam</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 form-group">
-                        <label>Select Class</label>
-                        <select id="className" class="form-control" required>
-                            <option value="">Loading Classes...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 form-group">
-                        <label>Gender</label>
-                        <select id="gender" class="form-control" required>
-                            <option value="Male">Boy (Male)</option>
-                            <option value="Female">Girl (Female)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 form-group">
-                        <label>Roll Number</label>
-                        <input type="number" id="rollNo" class="form-control" placeholder="e.g. 1" min="1" required>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-submit" id="searchBtn">View Result</button>
-            </form>
-            <div class="error-msg" id="errorMsg"></div>
-        </div>
-
-        <!-- Result Display Area -->
-        <div id="resultCard">
-            <div class="student-info">
-                <div><p>Name:</p><span id="resName"></span></div>
-                <div><p>Class:</p><span id="resClass"></span></div>
-                <div><p>Roll No:</p><span id="resRollNo"></span></div>
-                <div><p>Exam:</p><span id="resTerm"></span></div>
-            </div>
-            <table class="marks-table">
-                <thead>
-                    <tr><th>Subject</th><th>Max Mark</th><th>Obtained</th></tr>
-                </thead>
-                <tbody id="marksBody">
-                    <!-- Marks will load here -->
-                </tbody>
-            </table>
-            <div class="summary-box">
-                <div class="summary-item">
-                    <p>Total</p>
-                    <h4 id="resTotal">0/0</h4>
-                </div>
-                <div class="summary-item">
-                    <p>Percentage</p>
-                    <h4 id="resPerc">0%</h4>
-                </div>
-                <div class="summary-item">
-                    <p>Grade</p>
-                    <h4 id="resGrade">-</h4>
-                </div>
-                <div class="summary-item">
-                    <p>Status</p>
-                    <h4 id="resStatus">-</h4>
-                </div>
-            </div>
-            <button class="btn btn-outline-secondary w-100 mt-3" style="border-radius: 0 0 8px 8px; border:none; border-top: 1px solid #e2e8f0; background: #f8fafc;" onclick="location.reload()">Search Another Result</button>
-        </div>
-
+  <div class="card" id="searchCard" style="display: none;">
+    <div class="header-bg">
+      <div class="m-icon"><i class="fas fa-mosque"></i></div>
+      <h2 class="m-name" id="madrasaNameDisplay">Loading...</h2>
+      <span class="subtitle">Student Result Portal</span>
     </div>
 
-    <script type="module" src="result.js"></script>
+    <div class="content-area">
+      <div class="input-group">
+        <label>Exam Term</label>
+        <div class="input-wrapper">
+          <i class="fas fa-file-signature"></i>
+          <select id="examTerm">
+            <option value="Monthly Test">Monthly Test</option>
+            <option value="Quarterly Exam">Quarterly Exam</option>
+            <option value="Half Yearly Exam">Half Yearly Exam</option>
+            <option value="Annual Exam">Annual Exam</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Class / Division</label>
+        <div class="input-wrapper">
+          <i class="fas fa-chalkboard-user"></i>
+          <select id="studentClass">
+            <option value="">Loading Classes...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Gender</label>
+        <div class="input-wrapper">
+          <i class="fas fa-venus-mars"></i>
+          <select id="studentGender">
+            <option value="Male">Boy (Male)</option>
+            <option value="Female">Girl (Female)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Roll Number</label>
+        <div class="input-wrapper">
+          <i class="fas fa-hashtag"></i>
+          <input type="number" id="rollNo" placeholder="Enter your Roll No" required>
+        </div>
+      </div>
+
+      <div class="btn-group-search">
+        <button class="view" id="viewBtn"><i class="fas fa-search"></i> Check Result</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="resultDisplayCard" style="display: none;">
+    <div class="header-bg result-mode">
+      <div class="m-icon" style="font-size: 22px;"><i class="fas fa-mosque"></i></div>
+      <h2 class="m-name" id="madNameResult" style="font-size: 18px;">Madrasa Name</h2>
+      <div class="exam-badge" id="examTypeDisplay">Exam Term</div>
+    </div>
+
+    <div class="content-area result-mode">
+      <div class="student-box">
+        <div class="s-info-item">
+          <span class="s-label"><i class="fas fa-user"></i> Name</span>
+          <span class="s-value" id="sName">-</span>
+        </div>
+        <div class="s-info-item">
+          <span class="s-label"><i class="fas fa-id-card"></i> Ad No</span>
+          <span class="s-value" id="sReg">-</span>
+        </div>
+        <div class="s-info-item">
+          <span class="s-label"><i class="fas fa-chalkboard-user"></i> Class</span>
+          <span class="s-value" id="sClass">-</span>
+        </div>
+        <div class="s-info-item">
+          <span class="s-label"><i class="fas fa-calendar-check"></i> Attendance</span>
+          <span class="s-value" id="sAtt">-</span>
+        </div>
+      </div>
+
+      <div class="marks-wrapper">
+        <table>
+          <thead><tr><th>Subject</th><th class="td-center">Marks Obtained</th></tr></thead>
+          <tbody id="marksTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-item stat-total">
+          <span class="st-lbl">Total</span>
+          <span class="st-val val-blue" id="sTotal">-</span>
+        </div>
+        <div class="stat-item stat-rank">
+          <span class="st-lbl">Rank</span>
+          <span class="st-val val-purple" id="sRank">-</span>
+        </div>
+        <div class="stat-item stat-grade">
+          <span class="st-lbl">Grade</span>
+          <span class="st-val val-pink" id="sGrade">-</span>
+        </div>
+        <div class="stat-item stat-status">
+          <span class="st-lbl">Status</span>
+          <span class="st-val" id="sStatus">-</span>
+        </div>
+      </div>
+
+      <div class="btn-group-result" id="actionButtons">
+        <button class="btn-result btn-back" onclick="goBackToSearch()"><i class="fas fa-arrow-left"></i> Back</button>
+        <button class="btn-result btn-img" onclick="downloadImage()"><i class="fas fa-image"></i> Save Image</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="comingSoonCard">
+      <div class="cs-icon"><i class="fas fa-lock"></i></div>
+      <h2 class="cs-title">Result Locked</h2>
+      <p class="cs-desc">മദ്രസയിൽ നിന്നും റിസൾട്ട് പബ്ലിഷ് ചെയ്തിട്ടില്ല. പബ്ലിഷ് ചെയ്ത ശേഷം ദയവായി വീണ്ടും പരിശോധിക്കുക.</p>
+      <div style="padding: 0 20px;">
+          <button class="btn-result btn-back" style="width: 100%;" onclick="goBackToSearch()"><i class="fas fa-arrow-left"></i> Go Back</button>
+      </div>
+  </div>
+
+  <div class="footer">
+    Developed for Madrasa Management System
+  </div>
+
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDr5gIKnAdkiNrdLe2e3u1wOChFzeXlpCA",
+    authDomain: "madrasa-portal-63037.firebaseapp.com",
+    projectId: "madrasa-portal-63037",
+    storageBucket: "madrasa-portal-63037.firebasestorage.app",
+    messagingSenderId: "543466628748",
+    appId: "1:543466628748:web:6ec6375aa7d080cb403da9"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  let madrasaIdFromUrl = urlParams.get('mid');
+  let actualAdminUid = null;
+  let currentRollNo = "";
+
+  if (madrasaIdFromUrl) {
+      verifyAndLoadMadrasa(madrasaIdFromUrl);
+  } else {
+      document.getElementById("invalidLinkMsg").style.display = "block";
+  }
+
+  async function verifyAndLoadMadrasa(mid) {
+      try {
+          mid = String(mid).trim();
+          let adminDocSnap = null;
+
+          if (mid.length > 15) {
+              const directDoc = await getDoc(doc(db, "users", mid));
+              if (directDoc.exists() && directDoc.data().classes) {
+                  actualAdminUid = mid;
+                  adminDocSnap = directDoc;
+              }
+          }
+
+          if (!actualAdminUid) {
+              const variations = [mid, mid.toUpperCase(), mid.toLowerCase()];
+              if (!isNaN(mid) && mid !== "") variations.push(Number(mid));
+              const uniqueVariations = [...new Set(variations)];
+
+              for (let v of uniqueVariations) {
+                  const q = query(collection(db, "users"), where("madrasaId", "==", v));
+                  const querySnapshot = await getDocs(q);
+                  
+                  if (!querySnapshot.empty) {
+                      const adminDoc = querySnapshot.docs.find(d => d.data().classes);
+                      if (adminDoc) {
+                          actualAdminUid = adminDoc.id;
+                          adminDocSnap = adminDoc;
+                          break;
+                      }
+                  }
+              }
+          }
+
+          if (actualAdminUid && adminDocSnap) {
+              document.getElementById("searchCard").style.display = "block";
+              const data = adminDocSnap.data();
+              document.getElementById("madrasaNameDisplay").innerText = data.madrasaName || "Madrasa Name";
+              document.getElementById("madNameResult").innerText = data.madrasaName || "Madrasa Name";
+              
+              const classSelect = document.getElementById("studentClass");
+              if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+                  const classes = data.classes;
+                  classSelect.innerHTML = '<option value="">-- Select Class --</option>';
+                  classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+                  classes.forEach(c => { classSelect.innerHTML += `<option value="${c}">${c}</option>`; });
+              } else {
+                  classSelect.innerHTML = '<option value="">No classes available</option>';
+              }
+          } else {
+              document.getElementById("invalidLinkMsg").style.display = "block";
+          }
+      } catch (error) {
+          document.getElementById("invalidLinkMsg").style.display = "block";
+      }
+  }
+
+  document.getElementById("viewBtn").addEventListener("click", async () => {
+      if (!actualAdminUid) return;
+
+      const term = document.getElementById("examTerm").value;
+      const cls = document.getElementById("studentClass").value;
+      const gender = document.getElementById("studentGender").value;
+      const rollInput = document.getElementById("rollNo").value.trim();
+
+      if (!term || !cls || !gender || !rollInput) {
+          alert("Please fill all details correctly.");
+          return;
+      }
+
+      const rollNo = parseInt(rollInput);
+      if (isNaN(rollNo) || rollNo <= 0) {
+          alert("Invalid Roll Number");
+          return;
+      }
+      currentRollNo = rollNo; // സേവ് ഇമേജ് ഫയലിന്റെ പേരിനായി സൂക്ഷിക്കുന്നു
+
+      const btn = document.getElementById("viewBtn");
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Checking...`;
+      btn.disabled = true;
+
+      try {
+          const publishDocId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
+          const pubSnap = await getDoc(doc(db, "publish_settings", publishDocId));
+          
+          let isPublished = false;
+          if (pubSnap.exists()) {
+              const pData = pubSnap.data();
+              if (pData.isPublished) {
+                  isPublished = true;
+                  if (pData.publishDateTime && new Date(pData.publishDateTime) > new Date()) {
+                      isPublished = false;
+                  }
+              }
+          }
+
+          if (!isPublished) {
+              document.getElementById("searchCard").style.display = "none";
+              document.getElementById("comingSoonCard").style.display = "block";
+              resetBtn(btn);
+              return;
+          }
+
+          const stuQuery = query(collection(db, "students"), 
+                                 where("madrasaUid", "==", actualAdminUid), 
+                                 where("className", "==", cls),
+                                 where("gender", "==", gender));
+          const stuSnap = await getDocs(stuQuery);
+          
+          let students = [];
+          stuSnap.forEach(d => students.push({ id: d.id, ...d.data() }));
+
+          if (students.length === 0 || rollNo > students.length) {
+              alert("Student not found! Incorrect Roll Number or Class/Gender selection.");
+              resetBtn(btn);
+              return;
+          }
+
+          students.sort((a, b) => String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true}));
+          const targetStudent = students[rollNo - 1]; 
+          
+          const markDocId = `${targetStudent.id}_${term.replace(/\s+/g, '')}`;
+          const markSnap = await getDoc(doc(db, "marks", markDocId));
+
+          if (!markSnap.exists()) {
+              alert("Result not found! Marks have not been entered for this student yet.");
+              resetBtn(btn);
+              return;
+          }
+
+          displayResult(targetStudent, markSnap.data(), rollNo);
+          
+      } catch (error) {
+          console.error(error);
+          alert("Network Error! Please try again.");
+      }
+      resetBtn(btn);
+  });
+
+  function resetBtn(btn) {
+      btn.innerHTML = `<i class="fas fa-search"></i> Check Result`;
+      btn.disabled = false;
+  }
+
+  function displayResult(student, markData, rollNo) {
+      document.getElementById("searchCard").style.display = "none";
+      document.getElementById("resultDisplayCard").style.display = "block";
+
+      document.getElementById("examTypeDisplay").innerText = markData.term;
+      document.getElementById("sName").innerText = student.name.toUpperCase();
+      document.getElementById("sReg").innerText = student.admissionNo || "-";
+      document.getElementById("sClass").innerText = student.className;
+      document.getElementById("sAtt").innerText = markData.attendance || "-";
+
+      let marksHtml = "";
+      const subjects = markData.subjectConfig || [];
+      const marks = markData.marks || {};
+
+      subjects.forEach(sub => {
+          let markVal = marks[sub.name] !== undefined ? marks[sub.name] : "-";
+          let color = "#0f172a";
+          if (markVal === "A" || (Number(markVal) < sub.passMark && markVal !== "-")) {
+              color = "#dc2626"; // Fail red
+          }
+          marksHtml += `<tr><td>${sub.name}</td><td class="td-center" style="color:${color};">${markVal} <span style="font-size:10px; color:#94a3b8; font-weight:600;">/ ${sub.maxMark}</span></td></tr>`;
+      });
+
+      document.getElementById("marksTableBody").innerHTML = marksHtml;
+
+      document.getElementById("sTotal").innerText = `${markData.totalMarks}/${markData.maxMarkTotal}`;
+      document.getElementById("sRank").innerText = "-"; // Rank calculation can be added if needed globally
+      document.getElementById("sGrade").innerText = markData.grade;
+
+      const statusEl = document.getElementById("sStatus");
+      statusEl.className = "st-val"; // Reset classes
+      
+      if (markData.status === "Failed") {
+          statusEl.innerText = "FAILED";
+          statusEl.classList.add("status-fail");
+      } else if (markData.status === "Promoted") {
+          statusEl.innerText = "PROMOTED";
+          statusEl.classList.add("status-prom");
+      } else {
+          statusEl.innerText = "PASSED";
+          statusEl.classList.add("status-pass");
+      }
+  }
+
+  window.goBackToSearch = function() {
+      document.getElementById("resultDisplayCard").style.display = "none";
+      document.getElementById("comingSoonCard").style.display = "none";
+      document.getElementById("searchCard").style.display = "block";
+  }
+
+  window.downloadImage = function() {
+      const element = document.getElementById("resultDisplayCard");
+      const buttons = document.getElementById("actionButtons");
+      const originalAnimation = element.style.animation;
+
+      buttons.classList.add("hide-for-capture");
+      element.style.animation = 'none';
+
+      html2canvas(element, {
+        scale: 3, 
+        useCORS: true,
+        backgroundColor: "#ffffff", 
+        borderRadius: 20
+      }).then(canvas => {
+        buttons.classList.remove("hide-for-capture");
+        element.style.animation = originalAnimation;
+
+        const link = document.createElement('a');
+        link.download = `Result_RollNo_${currentRollNo}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      });
+  }
+
+</script>
+
 </body>
 </html>
