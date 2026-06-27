@@ -23,6 +23,7 @@ let assignedClass = "";
 let madrasaUid = "";
 let madrasaNameGlobal = "MADRASA";
 let teacherNameGlobal = "TEACHER";
+let customMadrasaId = "";
 let classSubjects = [];
 let studentsMap = {};
 let editModalInstance = null;
@@ -47,7 +48,6 @@ function clearCache(keyPrefix) {
     Object.keys(localStorage).forEach(key => { if(key.startsWith(keyPrefix)) localStorage.removeItem(key); });
 }
 
-// GRADE LOGIC
 function getGrade(percentage, isPassed) {
     if (!isPassed) return "D"; 
     if (percentage >= 90) return "A+";
@@ -90,6 +90,7 @@ async function loadTeacherData() {
             const adminDoc = await getDoc(doc(db, "users", madrasaUid));
             if (adminDoc.exists()) {
                 madrasaNameGlobal = adminDoc.data().madrasaName || "MADRASA";
+                customMadrasaId = adminDoc.data().madrasaId || madrasaUid;
                 displayMadrasaName.textContent = madrasaNameGlobal;
             }
             renderSubjectsUI();
@@ -112,7 +113,6 @@ function setupTabs() {
     });
 }
 
-// --- SUBJECTS WITH INDIVIDUAL MARKS ---
 document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     const newSub = document.getElementById("newSubjectName").value.trim();
     const maxMark = Number(document.getElementById("newSubjectMaxMark").value) || 100;
@@ -161,7 +161,7 @@ window.deleteSubject = async (subName) => {
                     
                     if (markVal === "A") {
                         isPassed = false;
-                    } else if (markVal !== undefined && markVal !== "-") {
+                    } else if (markVal !== undefined && markVal !== "" && markVal !== "-") {
                         const num = Number(markVal);
                         newTotalObtained += num;
                         if (num < sub.passMark) isPassed = false;
@@ -184,7 +184,6 @@ window.deleteSubject = async (subName) => {
         });
         
         await Promise.all(updatePromises);
-        clearCache(`cache_marks_${assignedClass}`);
         
         renderSubjectsUI(); 
         loadResults(); 
@@ -209,7 +208,6 @@ function renderSubjectsUI() {
         inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark}, Pass: ${sub.passMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark or 'A'"></div>`; 
     });
 
-    // പുതിയ മാറ്റം: Force Promote Checkbox മാർക്ക് ആഡ് ചെയ്യാൻ എളുപ്പത്തിൽ കൊടുക്കുന്നു
     if(classSubjects.length > 0) {
         inputsContainer.innerHTML += `
         <div class="form-group mt-3" style="background: #e0f2fe; padding: 12px; border-radius: 6px; border: 1px solid #bae6fd;">
@@ -222,7 +220,6 @@ function renderSubjectsUI() {
     }
 }
 
-// --- TAB 1: ADD & LOAD STUDENTS ---
 document.getElementById("addStudentBtn").addEventListener("click", async () => {
     const name = document.getElementById("studentName").value.trim();
     const admissionNo = document.getElementById("admissionNo").value.trim();
@@ -269,7 +266,7 @@ async function loadStudents() {
         return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
     });
     
-    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="8" style="text-align: center; padding: 20px;">No students added yet.</td></tr>' : "";
+    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="9" style="text-align: center; padding: 20px;">No students added yet.</td></tr>' : "";
     upgradeBody.innerHTML = students.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No students</td></tr>' : "";
     pdfListBody.innerHTML = "";
     markSelect.innerHTML = '<option value="">-- Select Student --</option>';
@@ -277,44 +274,55 @@ async function loadStudents() {
     document.getElementById("pdfMadrasaName4").textContent = madrasaNameGlobal;
     document.getElementById("pdfClassTitle4").textContent = `CLASS: ${assignedClass.toUpperCase()} - STUDENTS LIST`;
 
-    // പുതിയ മാറ്റം: ഡെസ്ക് ലേബൽ മാർക്ക് ഇല്ലാതെ തന്നെ കുട്ടികളുടെ ലിസ്റ്റിൽ നിന്നും ജനറേറ്റ് ചെയ്യുന്നു
-    let deskGrid = "";
     let boyRoll = 1, girlRoll = 1;
+    let deskLabelsHTML = "";
+    let currentChunk = "";
+    let labelCount = 0;
 
     students.forEach(st => {
         studentsMap[st.admissionNo] = st;
         const displayDob = formatDate(st.dob);
         
         tbody.innerHTML += `<tr>
-            <td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td>
+            <td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
             <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td>
             <td><button class="btn-custom btn-warning-custom btn-small btn-auto" onclick="openEditModal('${st.admissionNo}')">Edit</button> <button class="btn-custom btn-danger-custom btn-small btn-auto" onclick="deleteStudent('${st.id}')">Del</button></td></tr>`;
             
         upgradeBody.innerHTML += `<tr><td><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td><td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td></tr>`;
 
         pdfListBody.innerHTML += `<tr>
-            <td>${st.admissionNo}</td><td style="text-align:left;">${st.name}</td><td>${st.gender}</td>
+            <td>${st.admissionNo}</td><td style="text-align:left;">${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
             <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td></tr>`;
 
         markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}" data-adm="${st.admissionNo}">${st.admissionNo} - ${st.name}</option>`;
 
-        // ഡെസ്ക് ലേബൽ കോഡ്
         const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
         const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
         
-        deskGrid += `
-            <div class="desk-label-box" style="border-color: ${color}; color: ${color};">
-                <p>Roll No: ${roll}</p>
-                <p>Name: ${st.name.toUpperCase()}</p>
-                <p>Class: ${assignedClass.toUpperCase()}</p>
+        // മാറ്റം: ഡെസ്ക് ലേബലിൻ്റെ സ്പേസിംഗ് കൂട്ടി
+        currentChunk += `
+            <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 145px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
+                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
+                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Name: ${st.name.toUpperCase()}</p>
+                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Class: ${assignedClass.toUpperCase()}</p>
             </div>
         `;
+        labelCount++;
+
+        // മാറ്റം: ഒരു പേജിൽ 18 കുട്ടികൾ മാത്രം (കട്ടാവാതിരിക്കാൻ)
+        if (labelCount % 18 === 0) {
+            deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
+            currentChunk = "";
+        }
     });
     
-    // ഡെസ്ക് ലേബലുകൾ ആഡ് ചെയ്യുന്നു
+    if (currentChunk !== "") {
+        deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
+    }
+    
     const deskLabelsGridElement = document.getElementById("deskLabelsGrid");
     if(deskLabelsGridElement) {
-        deskLabelsGridElement.innerHTML = deskGrid;
+        deskLabelsGridElement.innerHTML = deskLabelsHTML;
     }
 }
 
@@ -360,12 +368,11 @@ window.deleteStudent = async (studentId) => {
         await deleteDoc(doc(db, "students", studentId));
         const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", studentId)));
         marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
-        clearCache(`cache_students_${assignedClass}`); clearCache(`cache_marks_${assignedClass}`);
+        clearCache(`cache_students_${assignedClass}`); 
         await loadStudents();
     } catch (e) {}
 };
 
-// --- UPGRADE STUDENTS ---
 document.getElementById("selectAllUpgrade").addEventListener("change", (e) => {
     const isChecked = e.target.checked;
     document.querySelectorAll(".upgrade-checkbox").forEach(cb => cb.checked = isChecked);
@@ -390,7 +397,6 @@ document.getElementById("processUpgradeBtn").addEventListener("click", async () 
     document.getElementById("processUpgradeBtn").textContent = "Upgrade Selected Students";
 });
 
-// --- MARKS ENTRY & PROMOTE LOGIC ---
 document.getElementById("markStudentSelect").addEventListener("change", async (e) => {
     const studentId = e.target.value; const term = document.getElementById("examTerm").value;
     if (!studentId || !term) return;
@@ -400,10 +406,13 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
 
     if (markDoc.exists()) {
         const data = markDoc.data();
-        document.getElementById("attendanceInput").value = data.attendance || "";
+        const attVal = data.attendance || "";
+        document.getElementById("attendanceInput").value = attVal === "-" ? "" : attVal;
+        
         document.querySelectorAll(".mark-input").forEach(inp => {
             const subName = inp.getAttribute("data-subject");
-            inp.value = data.marks && data.marks[subName] !== undefined ? data.marks[subName] : "";
+            const mVal = data.marks && data.marks[subName] !== undefined ? data.marks[subName] : "";
+            inp.value = mVal === "-" ? "" : mVal;
         });
         if(forcePromoteCheck) forcePromoteCheck.checked = (data.status === "Promoted");
         document.getElementById("saveMarksBtn").textContent = "Update Marks";
@@ -434,11 +443,7 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         const val = inp.value.trim().toUpperCase();
         
         if (val === "") {
-            if(!isForcePromoted) {
-                valid = false;
-            } else {
-                marksData[sub.name] = "-"; // Force promote ആണെങ്കിൽ ഒഴിച്ചിട്ട ഫീൽഡുകൾ '-' ആക്കി മാറ്റുന്നു
-            }
+            marksData[sub.name] = ""; 
         }
         else if (val === "A") { marksData[sub.name] = "A"; isPassed = false; }
         else {
@@ -452,14 +457,12 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         }
     });
     
-    // Force promote അല്ലെങ്കിൽ മാത്രം വാലിഡേഷൻ എറർ കാണിക്കും
     if (!valid && !isForcePromoted) return alert("Please check marks inputs. Ensure they don't exceed Max Mark for each subject.");
     
     const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
     let finalGrade = getGrade(percentage, isPassed);
     let finalStatus = isPassed ? "Passed" : "Failed";
 
-    // Force Promote Validation (If checkbox is checked, save as Promoted and D+)
     if (isForcePromoted) {
         finalStatus = "Promoted";
         finalGrade = "D+";
@@ -474,7 +477,6 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
             subjectConfig: classSubjects,
             percentage, grade: finalGrade, status: finalStatus
         });
-        clearCache(`cache_marks_${assignedClass}`);
         alert("Marks saved!"); select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
         if(forcePromoteCheck) forcePromoteCheck.checked = false;
         loadResults();
@@ -482,7 +484,6 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     document.getElementById("saveMarksBtn").textContent = "Save Marks";
 });
 
-// BULK EXCEL UPLOAD UPDATE
 document.getElementById("uploadStudentExcelBtn").addEventListener("click", () => {
     const file = document.getElementById("studentExcel").files[0];
     if (!file) return alert("Select an Excel file.");
@@ -561,11 +562,13 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 
                 for (const sub of classSubjects) {
                     const subKey = Object.keys(row).find(k => k.toLowerCase() === sub.name.toLowerCase());
-                    let val = subKey ? String(row[subKey]).trim().toUpperCase() : "0";
+                    let val = subKey ? String(row[subKey]).trim().toUpperCase() : "";
                     
                     if (val === "A") {
                         marksData[sub.name] = "A";
                         isPassed = false;
+                    } else if (val === "" || val === "-") {
+                        marksData[sub.name] = "";
                     } else {
                         const num = Number(val);
                         if (isNaN(num) || num > sub.maxMark) { isValid = false; break; }
@@ -581,16 +584,18 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 const finalGrade = getGrade(percentage, isPassed);
                 
                 const docId = `${student.id}_${term.replace(/\s+/g, '')}`;
+                let finalAtt = attKey ? String(row[attKey]).trim() : "";
+                if(finalAtt === "-") finalAtt = "";
+
                 await setDoc(doc(db, "marks", docId), {
                     studentId: student.id, studentName: student.name, madrasaUid, className: assignedClass, term,
-                    marks: marksData, attendance: attKey ? String(row[attKey]).trim() : "",
+                    marks: marksData, attendance: finalAtt,
                     totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
                     subjectConfig: classSubjects,
                     percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
                 });
                 count++;
             }
-            clearCache(`cache_marks_${assignedClass}`);
             alert(`Uploaded ${count} student marks.`);
             document.getElementById("marksExcel").value = "";
             loadResults();
@@ -600,8 +605,6 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     reader.readAsArrayBuffer(file);
 });
 
-
-// --- BULK DELETE MARKS ---
 document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async () => {
     const term = document.getElementById("viewResultTerm").value;
     if(!confirm(`Are you absolutely sure you want to DELETE ALL marks for ${term} in Class ${assignedClass}?`)) return;
@@ -612,14 +615,12 @@ document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async
         const deletePromises = snap.docs.map(mDoc => deleteDoc(doc(db, "marks", mDoc.id)));
         await Promise.all(deletePromises);
         
-        clearCache(`cache_marks_${assignedClass}`);
         alert(`All marks for ${term} deleted successfully.`);
         loadResults();
     } catch (e) { alert("Error deleting marks."); }
     document.getElementById("deleteAllMarksTermBtn").textContent = "Delete ALL Marks for this Term";
 });
 
-// --- LOAD RESULTS ---
 document.getElementById("viewResultTerm").addEventListener("change", loadResults);
 
 async function loadResults() {
@@ -650,26 +651,51 @@ async function loadResults() {
     document.getElementById("pdfExamTitle2").textContent = titleText;
     document.getElementById("pdfTeacherName1").textContent = teacherNameGlobal;
     
-    const cacheKey = `cache_marks_${assignedClass}_${term}`;
-    let results = [];
-    const cachedMarks = localStorage.getItem(cacheKey);
+    const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
     
-    if(cachedMarks) { results = JSON.parse(cachedMarks); } 
-    else {
-        const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
-        snap.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
-        localStorage.setItem(cacheKey, JSON.stringify(results));
-    }
+    let marksMap = {};
+    snap.forEach(doc => { marksMap[doc.data().studentId] = { id: doc.id, ...doc.data() }; });
+
+    let results = [];
+    
+    Object.values(studentsMap).forEach(st => {
+        if (marksMap[st.id]) {
+            results.push(marksMap[st.id]);
+        } else {
+            results.push({
+                isPlaceholder: true, 
+                studentId: st.id,
+                studentName: st.name,
+                marks: {},
+                attendance: "",
+                totalMarks: "",
+                percentage: 0,
+                grade: "",
+                status: ""
+            });
+        }
+    });
 
     if (results.length === 0) {
-        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:20px;">No results found for ${term}.</td></tr>`;
+        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:20px;">No students added in this class yet.</td></tr>`;
         ['pdfTbody1', 'pdfTbody2'].forEach(id => document.getElementById(id).innerHTML = "");
         return;
     }
     
-    results.sort((a, b) => b.totalMarks - a.totalMarks);
+    results.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
     let rank = 1;
-    results.forEach(r => r.rank = r.status !== "Failed" ? rank++ : "-");
+    let hasMarks = false;
+
+    results.forEach(r => {
+        if (!r.isPlaceholder && r.totalMarks !== undefined && r.totalMarks !== "") {
+            hasMarks = true;
+        }
+        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") {
+            r.rank = "";
+        } else {
+            r.rank = rank++;
+        }
+    });
     
     results.sort((a, b) => {
         const adA = Object.keys(studentsMap).find(k => studentsMap[k].id === a.studentId) || "";
@@ -688,8 +714,8 @@ async function loadResults() {
         const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === res.studentId) || "-";
         const gen = studentsMap[adNo]?.gender || "Male";
         
-        if (gen === "Male") { bTot++; if (res.status !== "Failed") bPass++; }
-        else { gTot++; if (res.status !== "Failed") gPass++; }
+        if (gen === "Male") { bTot++; if (res.status !== "Failed" && !res.isPlaceholder) bPass++; }
+        else { gTot++; if (res.status !== "Failed" && !res.isPlaceholder) gPass++; }
         
         const roll = gen === "Male" ? boyRoll++ : girlRoll++;
         const color = gen === "Female" ? "#d32f2f" : "#000000"; 
@@ -697,9 +723,10 @@ async function loadResults() {
         let marksHTMLScreen = "", marksHTMLPdf1 = "", marksHTMLPdf2 = "";
         
         classSubjects.forEach(sub => {
-            const mark = res.marks && res.marks[sub.name] !== undefined ? res.marks[sub.name] : "-";
+            const rawMark = res.marks && res.marks[sub.name] !== undefined ? res.marks[sub.name] : "";
+            const mark = (rawMark === "-" || rawMark === undefined || rawMark === null) ? "" : rawMark;
             const passLimit = sub.passMark || 35;
-            const isFailMark = mark === "A" || (mark !== "-" && Number(mark) < passLimit);
+            const isFailMark = mark === "A" || (mark !== "" && Number(mark) < passLimit);
             const mColor = isFailMark ? "#d32f2f" : "#000000";
             
             marksHTMLScreen += `<td style="color: ${mColor};">${mark}</td>`;
@@ -707,27 +734,36 @@ async function loadResults() {
             marksHTMLPdf2 += `<td style="color: ${mColor};">${mark}</td>`;
         });
         
-        let displayGrade = res.grade;
-        if (!displayGrade || displayGrade.includes("Failed") || displayGrade.toLowerCase() === "passed") {
-            displayGrade = getGrade(res.percentage, res.status !== "Failed");
+        let displayGrade = res.grade || "";
+        if (!res.isPlaceholder && (!displayGrade || displayGrade.includes("Failed") || displayGrade.toLowerCase() === "passed")) {
+            if (res.totalMarks !== "") displayGrade = getGrade(res.percentage, res.status !== "Failed");
         }
         if (res.status === "Promoted") displayGrade = "D+"; 
 
-        const statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
-        const statusColor = res.status === "Failed" ? "#d32f2f" : (res.status === "Promoted" ? "#16a34a" : "#000000"); 
-        const pdfPassText = statusText === "FAILED" ? "F" : (statusText === "PROMOTED" ? "PR" : "P");
+        let statusText = "";
+        let statusColor = "#000000";
+        let pdfPassText = "";
+
+        if (!res.isPlaceholder && res.status) {
+            statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
+            statusColor = res.status === "Failed" ? "#d32f2f" : (res.status === "Promoted" ? "#16a34a" : "#000000"); 
+            pdfPassText = statusText === "FAILED" ? "F" : (statusText === "PROMOTED" ? "PR" : "P");
+        }
+
+        const actionBtn = res.isPlaceholder ? "" : `<button class="btn-custom btn-danger-custom btn-small" onclick="deleteMark('${res.id}', '${term}')">Del</button>`;
+        const attendanceDisp = (res.attendance && res.attendance !== "-") ? res.attendance : "";
 
         sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
-            <td>${res.attendance || "-"}</td>${marksHTMLScreen}<td>${res.totalMarks}</td><td>${res.rank}</td><td style="font-weight:bold;">${displayGrade}</td>
+            <td>${attendanceDisp}</td>${marksHTMLScreen}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td>
             <td style="color:${statusColor}; font-weight:bold;">${statusText}</td>
-            <td><button class="btn-custom btn-danger-custom btn-small" onclick="deleteMark('${res.id}', '${term}')">Del</button></td></tr>`;
+            <td>${actionBtn}</td></tr>`;
             
         pBody1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
-            <td>${res.attendance || ""}</td>${marksHTMLPdf1}<td>${res.totalMarks}</td><td>${res.rank !== "-" ? res.rank : ""}</td>
+            <td>${attendanceDisp}</td>${marksHTMLPdf1}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
             <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
             
         pBody2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
-            <td>${res.attendance || ""}</td>${marksHTMLPdf2}<td>${res.totalMarks}</td><td>${res.rank !== "-" ? res.rank : ""}</td>
+            <td>${attendanceDisp}</td>${marksHTMLPdf2}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
             <td style="font-weight:bold;">${displayGrade}</td><td style="color:${statusColor}; font-weight:bold;">${statusText}</td></tr>`;
     });
     
@@ -735,19 +771,23 @@ async function loadResults() {
     document.getElementById("pdfTbody1").innerHTML = pBody1;
     document.getElementById("pdfTbody2").innerHTML = pBody2;
     
-    document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
-    document.getElementById("pdfPass1").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
-    document.getElementById("pdfPerc1").innerHTML = `<td style="color: black;">${bTot > 0 ? Math.round((bPass/bTot)*100) : 0}%</td><td style="color: #d32f2f;">${gTot > 0 ? Math.round((gPass/gTot)*100) : 0}%</td><td style="color: black;">${(bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0}%</td>`;
+    if (hasMarks) {
+        document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
+        document.getElementById("pdfPass1").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
+        document.getElementById("pdfPerc1").innerHTML = `<td style="color: black;">${bTot > 0 ? Math.round((bPass/bTot)*100) : 0}%</td><td style="color: #d32f2f;">${gTot > 0 ? Math.round((gPass/gTot)*100) : 0}%</td><td style="color: black;">${(bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0}%</td>`;
+    } else {
+        document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
+        document.getElementById("pdfPass1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+        document.getElementById("pdfPerc1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+    }
 }
 
 window.deleteMark = async (docId, term) => {
     if(!confirm("Delete this result?")) return;
     await deleteDoc(doc(db, "marks", docId));
-    clearCache(`cache_marks_${assignedClass}`);
     loadResults();
 };
 
-// --- RESULT PUBLISH MANAGEMENT ---
 document.getElementById("publishTerm").addEventListener("change", async (e) => {
     loadPublishSettings(e.target.value);
 });
@@ -807,35 +847,89 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
     document.getElementById("savePublishSettingsBtn").textContent = "Save Publish Settings";
 });
 
-// PDF Generator with Dynamic Naming
-function generatePDF(areaId, fileName, orientation = 'p') {
+// മാറ്റം 3: PDF കട്ടാവുന്ന പ്രശ്നവും വലിയ ലിസ്റ്റുകൾ Auto-Scale ആക്കുന്ന കോഡും 
+async function generatePDF(areaId, fileName, orientation = 'p') {
     const area = document.getElementById(areaId);
     const wrapper = area.parentElement;
-    window.scrollTo(0, 0);
-    wrapper.style.left = "0";
     
-    html2canvas(area, { scale: 2, useCORS: true, backgroundColor: "#ffffff" }).then(canvas => {
+    const origPos = wrapper.style.position;
+    const origZ = wrapper.style.zIndex;
+    const origOpacity = wrapper.style.opacity;
+    
+    // PDF ജനറേറ്റ് ചെയ്യാൻ വേണ്ടിയുള്ള സുരക്ഷിതമായ പൊസിഷൻ
+    wrapper.style.position = "absolute"; 
+    wrapper.style.zIndex = "-1";
+    wrapper.style.opacity = "1";
+    window.scrollTo(0, 0);
+
+    const canvasOptions = {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        scrollY: 0,
+        scrollX: 0
+    };
+
+    if (areaId === 'pdfDeskLabelsArea') {
+        const pages = area.querySelectorAll('.pdf-page-chunk');
+        if (pages.length > 0) {
+            const pdf = new jspdf.jsPDF(orientation, 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            for (let i = 0; i < pages.length; i++) {
+                if (i > 0) pdf.addPage();
+                const canvas = await html2canvas(pages[i], canvasOptions);
+                const imgData = canvas.toDataURL("image/png");
+                
+                let imgWidth = pdfWidth - 10;
+                let imgHeight = (canvas.height * imgWidth) / canvas.width;
+                
+                // ഒരു പേജിൽ ഉൾക്കൊള്ളാൻ ഓട്ടോമാറ്റിക് ആയി സൈസ് കുറയ്ക്കുന്നു
+                if (imgHeight > (pdfHeight - 10)) {
+                    let ratio = (pdfHeight - 10) / imgHeight;
+                    imgHeight = imgHeight * ratio;
+                    imgWidth = imgWidth * ratio;
+                }
+                
+                const xPos = (pdfWidth - imgWidth) / 2;
+                pdf.addImage(imgData, 'PNG', xPos, 5, imgWidth, imgHeight); 
+            }
+            pdf.save(fileName);
+            wrapper.style.position = origPos;
+            wrapper.style.zIndex = origZ;
+            wrapper.style.opacity = origOpacity;
+            return;
+        }
+    }
+
+    html2canvas(area, canvasOptions).then(canvas => {
         const imgData = canvas.toDataURL("image/png");
         const pdf = new jspdf.jsPDF(orientation, 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
         
-        let imgWidth = pdfWidth;
-        let imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        let pdfWidth = pdf.internal.pageSize.getWidth();
+        let pdfHeight = pdf.internal.pageSize.getHeight();
         
-        if (imgHeight > pdfHeight) {
-            imgHeight = pdfHeight - 10;
-            imgWidth = (canvas.width * imgHeight) / canvas.height;
+        let imgWidth = pdfWidth - 10;
+        let imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        // 40 കുട്ടികൾ ആണെങ്കിലും ഒരു പേജിൽ തന്നെ ഉൾക്കൊള്ളാനുള്ള കോഡ്
+        if (imgHeight > (pdfHeight - 10)) {
+            let ratio = (pdfHeight - 10) / imgHeight;
+            imgHeight = imgHeight * ratio;
+            imgWidth = imgWidth * ratio;
         }
         
         const xPos = (pdfWidth - imgWidth) / 2;
         pdf.addImage(imgData, 'PNG', xPos, 5, imgWidth, imgHeight);
+        
         pdf.save(fileName);
-        wrapper.style.left = "-9999px";
+        wrapper.style.position = origPos;
+        wrapper.style.zIndex = origZ;
+        wrapper.style.opacity = origOpacity;
     });
 }
 
-// PDF Download Button Listeners with Dynamic Filenames
 document.getElementById("downloadStudentListBtn").addEventListener("click", () => {
     generatePDF("pdfStudentListArea", `Class_${assignedClass}_Students_List.pdf`, 'p');
 });
@@ -855,12 +949,11 @@ document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () =>
     generatePDF("pdfDeskLabelsArea", `Class_${assignedClass}_${term}_DeskLabels.pdf`, 'p');
 });
 
-// --- Copy Result Link ---
 document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
-    const resultUrl = `${window.location.origin}/result.html?mid=${madrasaUid}`;
+    const resultUrl = `${window.location.origin}/result.html?mid=${customMadrasaId || madrasaUid}`;
     
     navigator.clipboard.writeText(resultUrl).then(() => {
-        alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.");
+        alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.\n\nLink: " + resultUrl);
     }).catch(err => {
         alert("Error copying link.");
     });

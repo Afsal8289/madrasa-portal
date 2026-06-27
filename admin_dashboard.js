@@ -22,7 +22,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let adminUid = "";
-let madrasaIdCode = "";
+let madrasaIdCode = ""; // ലിങ്കിൽ കാണിക്കാനുള്ള മദ്രസ ഐഡി
 
 // Global variables
 window.currentTcStudent = null;
@@ -45,24 +45,26 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         adminUid = user.uid;
-        loadMadrasaData(); 
+        await loadMadrasaData(); 
         loadTeachers();    
         loadPendingAdmissions();
     }
 });
 
-// --- Copy Links Logic ---
+// --- Copy Links Logic (Modified to use Custom Madrasa ID) ---
 document.getElementById('copyAdmissionLinkBtn').addEventListener('click', () => {
-    const admissionUrl = `${window.location.origin}/admission.html?mid=${adminUid}`;
+    const targetId = madrasaIdCode || adminUid; // മദ്രസ ഐഡി ഉണ്ടെങ്കിൽ അത് എടുക്കും, ഇല്ലെങ്കിൽ മാത്രം പഴയ ഐഡി
+    const admissionUrl = `${window.location.origin}/admission.html?mid=${targetId}`;
     navigator.clipboard.writeText(admissionUrl).then(() => {
-        alert("Admission Link Copied!\nShare this link via WhatsApp.");
+        alert("Admission Link Copied!\n\nLink: " + admissionUrl + "\n\nShare this link via WhatsApp.");
     });
 });
 
 document.getElementById('copyResultLinkBtn').addEventListener('click', () => {
-    const resultUrl = `${window.location.origin}/result.html?mid=${adminUid}`;
+    const targetId = madrasaIdCode || adminUid; // മദ്രസ ഐഡി ഉണ്ടെങ്കിൽ അത് എടുക്കും, ഇല്ലെങ്കിൽ മാത്രം പഴയ ഐഡി
+    const resultUrl = `${window.location.origin}/result.html?mid=${targetId}`;
     navigator.clipboard.writeText(resultUrl).then(() => {
-        alert("Result Link Copied!\nShare this link so students can view their results.");
+        alert("Result Link Copied!\n\nLink: " + resultUrl + "\n\nShare this link so students can view their results.");
     });
 });
 
@@ -80,7 +82,7 @@ async function loadMadrasaData() {
         
         if(docSnap.exists()) {
             const data = docSnap.data();
-            madrasaIdCode = data.madrasaId; 
+            madrasaIdCode = data.madrasaId; // ഡാറ്റാബേസിൽ നിന്ന് മദ്രസ ഐഡി എടുക്കുന്നു
             document.getElementById('madrasaNameDisplay').innerText = data.madrasaName;
             localStorage.setItem('madrasaName', data.madrasaName); 
 
@@ -301,7 +303,147 @@ window.rejectAdmission = async (docId) => {
 };
 
 
-// --- 4. TC (TRANSFER CERTIFICATE) SECTION ---
+// --- 4. TEACHER MANAGEMENT ---
+document.getElementById('createTeacherBtn').addEventListener('click', async () => {
+    const name = document.getElementById('tName').value.trim();
+    const mobile = document.getElementById('tMobile').value.trim();
+    const password = document.getElementById('tPassword').value.trim();
+    const cls = document.getElementById('tClass').value;
+
+    if(!name || !mobile || !password || !cls) return alert("Please fill all fields!");
+
+    document.getElementById('createTeacherBtn').innerText = "Adding...";
+    
+    // ഡമ്മി ഇമെയിൽ സിസ്റ്റം മാറ്റി മദ്രസ ഐഡി കൂടി ചേർത്തുള്ള പുതിയ ലോഗിൻ സിസ്റ്റം
+    const currentVersion = "v8"; // പുതിയ വെർഷൻ
+    const targetId = madrasaIdCode || adminUid; 
+    const dummyEmail = `${mobile}@${currentVersion}.${targetId}.com`.toLowerCase();
+
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, password);
+        await setDoc(doc(db, "users", userCredential.user.uid), {
+            name: name,
+            mobile: mobile,
+            email: dummyEmail, 
+            role: "teacher",
+            assignedClass: cls,
+            madrasaUid: adminUid,
+            version: currentVersion
+        });
+        alert("Teacher created successfully!");
+        document.getElementById('tName').value = '';
+        document.getElementById('tMobile').value = '';
+        document.getElementById('tPassword').value = '';
+        document.getElementById('tClass').value = '';
+        loadTeachers();
+    } catch (error) {
+        if(error.code === 'auth/email-already-in-use') {
+            alert("This Mobile Number is already in use. Please use a different number or delete the old account.");
+        } else {
+            alert("Error creating teacher: " + error.message);
+        }
+    }
+    document.getElementById('createTeacherBtn').innerText = "Add Teacher";
+});
+
+async function loadTeachers() {
+    const tbody = document.getElementById('teacherTableBody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>';
+    try {
+        const q = query(collection(db, "users"), where("role", "==", "teacher"), where("madrasaUid", "==", adminUid));
+        const querySnapshot = await getDocs(q);
+        
+        tbody.innerHTML = '';
+        teachersDataList = {}; 
+
+        if(querySnapshot.empty) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
+
+        let teachersArray = [];
+        querySnapshot.forEach((documentSnapshot) => {
+            const data = documentSnapshot.data();
+            data.id = documentSnapshot.id; 
+            teachersArray.push(data);
+            teachersDataList[data.id] = data; 
+        });
+
+        teachersArray.sort((a, b) => {
+            const classA = a.assignedClass || "";
+            const classB = b.assignedClass || "";
+            return classA.localeCompare(classB, undefined, {numeric: true, sensitivity: 'base'});
+        });
+
+        teachersArray.forEach((data) => {
+            const displayMobile = data.mobile || data.email; 
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${data.name}</td>
+                <td>${displayMobile}</td>
+                <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
+                <td>
+                    <button class="btn-small edit-t-btn" data-id="${data.id}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
+                    <button class="btn-small btn-red delete-btn" data-id="${data.id}">Remove</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.edit-t-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tId = e.target.getAttribute('data-id');
+                const tData = teachersDataList[tId];
+                
+                document.getElementById('editTeacherId').value = tId;
+                document.getElementById('editTeacherName').value = tData.name;
+                document.getElementById('editTeacherMobile').value = tData.mobile || tData.email;
+
+                const classSelect = document.getElementById('editTeacherClass');
+                const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
+                classSelect.innerHTML = '<option value="">Select a Class</option>';
+                cachedClasses.forEach(cls => {
+                    const isSelected = (cls === tData.assignedClass) ? "selected" : "";
+                    classSelect.innerHTML += `<option value="${cls}" ${isSelected}>${cls}</option>`;
+                });
+                
+                document.getElementById('editTeacherModal').classList.remove('hidden');
+            });
+        });
+
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const tId = e.target.getAttribute('data-id');
+                if(confirm("Are you sure you want to remove this teacher?")) { 
+                    await deleteDoc(doc(db, "users", tId)); 
+                    loadTeachers(); 
+                }
+            });
+        });
+    } catch (error) { console.error("Error loading teachers:", error); }
+}
+
+document.getElementById('saveTeacherEditBtn').addEventListener('click', async () => {
+    const tId = document.getElementById('editTeacherId').value;
+    const newName = document.getElementById('editTeacherName').value.trim();
+    const newClass = document.getElementById('editTeacherClass').value;
+
+    if(!newName || !newClass) return alert("Please fill Name and Class");
+
+    document.getElementById('saveTeacherEditBtn').innerText = "Saving...";
+    try {
+        await updateDoc(doc(db, "users", tId), {
+            name: newName,
+            assignedClass: newClass
+        });
+        alert("Teacher details updated successfully!");
+        document.getElementById('editTeacherModal').classList.add('hidden');
+        loadTeachers();
+    } catch (error) {
+        alert("Error updating teacher");
+    }
+    document.getElementById('saveTeacherEditBtn').innerText = "Save Changes";
+});
+
+// --- 5. TC (TRANSFER CERTIFICATE) SECTION ---
 document.getElementById('searchTcBtn').addEventListener('click', async () => {
     const adNo = document.getElementById('tcAdnoSearch').value.trim();
     if(!adNo) return alert("Enter Admission Number");
@@ -402,179 +544,7 @@ window.generateTCAndRemove = async () => {
             const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", docId)));
             marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
             
-            document.getElementById('tcStudentDetails').innerHTML = `<p style="color:green; font-weight:bold; margin:0; padding: 20px; text-align:center;">✅ TC Generated & Student removed successfully.</p>`;
-            document.getElementById('tcAdnoSearch').value = '';
-            window.currentTcStudent = null;
-            window.currentTcStudentId = null;
-        } catch (e) { alert("Error removing student data after generating TC."); }
+            document.getElementById('tcStudentDetails').innerHTML = `<p style="color:green; font-weight:bold; margin:0; padding: 20px; text-align: center;">TC Generated & Student Removed Successfully!</p>`;
+        } catch (e) { alert("Error removing student from database."); }
     });
 };
-
-// --- 5. TEACHERS SECTION (Smart Auto-Versioning) ---
-
-const createBtn = document.getElementById('createTeacherBtn');
-createBtn.addEventListener('click', async () => {
-    const tName = document.getElementById('tName').value.trim();
-    const tMobile = document.getElementById('tMobile').value.trim();
-    const tPassword = document.getElementById('tPassword').value;
-    const tClass = document.getElementById('tClass').value;
-
-    if(!tName || !tMobile || !tPassword || !tClass) return alert("Please fill in all details!");
-    
-    if(!madrasaIdCode || madrasaIdCode.trim() === "") {
-        return alert("Error: ഈ മദ്രസയ്ക്ക് 'Madrasa ID' ലഭ്യമല്ല!\n\nസൂപ്പർ അഡ്മിൻ പാനലിൽ പോയി ഈ മദ്രസയെ Edit ചെയ്ത് ഒരു ID (ഉദാ: 1050) നൽകിയ ശേഷം മാത്രം ഉസ്താദുമാരെ ആഡ് ചെയ്യുക.");
-    }
-
-    createBtn.innerText = "Adding...";
-
-    const cleanMobile = tMobile.replace(/[^0-9]/g, ''); 
-    const cleanMadrasaId = madrasaIdCode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase(); 
-
-    if(!cleanMobile || cleanMobile.length < 10) {
-        createBtn.innerText = "Add Teacher";
-        return alert("ദയവായി കൃത്യമായ 10 അക്ക മൊബൈൽ നമ്പർ നൽകുക!");
-    }
-
-    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
-    const secondaryAuth = getAuth(secondaryApp);
-    
-    // ഈ നമ്പറിൽ അക്കൗണ്ട് ഉണ്ടെങ്കിൽ സിസ്റ്റം തനിയെ v2, v3 എന്നിങ്ങനെ പേര് മാറ്റി സേവ് ചെയ്യും
-    const suffixes = ["", "v2.", "v3.", "v4.", "v5.", "v6.", "v7.", "v8."];
-    let newUid = "";
-    let successfulEmail = "";
-    let created = false;
-
-    for (let suffix of suffixes) {
-        const dummyEmail = `${cleanMobile}@${suffix}${cleanMadrasaId}.com`;
-        try {
-            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, dummyEmail, tPassword);
-            newUid = userCredential.user.uid;
-            successfulEmail = dummyEmail;
-            created = true;
-            break; // അക്കൗണ്ട് ക്രിയേറ്റ് ആയാൽ ലൂപ്പ് നിർത്തുന്നു
-        } catch (error) {
-            if (error.code === 'auth/email-already-in-use') {
-                continue; // നമ്പർ ഉപയോഗിച്ചിട്ടുണ്ടെങ്കിൽ തനിയെ അടുത്ത വേർഷനിലേക്ക് മാറും
-            } else {
-                await signOut(secondaryAuth);
-                createBtn.innerText = "Add Teacher";
-                return alert("Error: " + error.message);
-            }
-        }
-    }
-
-    if (!created) {
-        await signOut(secondaryAuth);
-        createBtn.innerText = "Add Teacher";
-        return alert("Error: ഈ ഉസ്താദിനെ ഒരുപാട് തവണ റിമൂവ് ചെയ്ത് ആഡ് ചെയ്തിട്ടുണ്ട്.");
-    }
-
-    try {
-        await setDoc(doc(db, "users", newUid), {
-            name: tName, 
-            mobile: cleanMobile, // പത്ത് അക്ക നമ്പർ മാത്രം ഡാറ്റാബേസിൽ സേവ് ആവും
-            email: successfulEmail, 
-            role: "teacher", 
-            assignedClass: tClass, 
-            madrasaUid: adminUid, 
-            madrasaId: madrasaIdCode
-        });
-
-        await signOut(secondaryAuth);
-        alert("Teacher Added Successfully!");
-        createBtn.innerText = "Add Teacher";
-        
-        document.getElementById('tName').value = ''; 
-        document.getElementById('tMobile').value = '';
-        document.getElementById('tPassword').value = ''; 
-        document.getElementById('tClass').value = '';
-        
-        loadTeachers(); 
-        
-    } catch (error) { 
-        console.error("Firebase Auth Error:", error);
-        alert("Error saving data: " + error.message); 
-        createBtn.innerText = "Add Teacher"; 
-    }
-});
-
-// ടീച്ചർമാരുടെ ലിസ്റ്റ് ലോഡ് ചെയ്യുന്ന ഫംഗ്ഷൻ (ക്ലാസ്സ് അനുസരിച്ച് ഓർഡറിൽ)
-async function loadTeachers() {
-    const tbody = document.getElementById('teacherTableBody');
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>';
-    try {
-        const q = query(collection(db, "users"), where("role", "==", "teacher"), where("madrasaUid", "==", adminUid));
-        const querySnapshot = await getDocs(q);
-        
-        tbody.innerHTML = '';
-        teachersDataList = {}; 
-
-        if(querySnapshot.empty) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
-
-        // 1. ഡാറ്റ ഒരു അറേയിലേക്ക് (Array) മാറ്റുന്നു
-        let teachersArray = [];
-        querySnapshot.forEach((documentSnapshot) => {
-            const data = documentSnapshot.data();
-            data.id = documentSnapshot.id; // Edit/Delete ചെയ്യാൻ ID സേവ് ചെയ്യുന്നു
-            teachersArray.push(data);
-            teachersDataList[data.id] = data; 
-        });
-
-        // 2. ക്ലാസ്സ് അനുസരിച്ച് ഓർഡർ ചെയ്യുന്നു (Class 1, 2, 10, A, B എന്നിങ്ങനെ)
-        teachersArray.sort((a, b) => {
-            const classA = a.assignedClass || "";
-            const classB = b.assignedClass || "";
-            return classA.localeCompare(classB, undefined, {numeric: true, sensitivity: 'base'});
-        });
-
-        // 3. ഓർഡർ ചെയ്ത ലിസ്റ്റ് ടേബിളിലേക്ക് പ്രിൻ്റ് ചെയ്യുന്നു
-        teachersArray.forEach((data) => {
-            const displayMobile = data.mobile || data.email; 
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${data.name}</td>
-                <td>${displayMobile}</td>
-                <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
-                <td>
-                    <button class="btn-small edit-t-btn" data-id="${data.id}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
-                    <button class="btn-small btn-red delete-btn" data-id="${data.id}">Remove</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        // Edit ബട്ടൺ വർക്ക് ചെയ്യാൻ
-        document.querySelectorAll('.edit-t-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const tId = e.target.getAttribute('data-id');
-                const tData = teachersDataList[tId];
-                
-                document.getElementById('editTeacherId').value = tId;
-                document.getElementById('editTeacherName').value = tData.name;
-                document.getElementById('editTeacherMobile').value = tData.mobile || tData.email;
-
-                const classSelect = document.getElementById('editTeacherClass');
-                const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
-                classSelect.innerHTML = '<option value="">Select a Class</option>';
-                cachedClasses.forEach(cls => {
-                    const isSelected = (cls === tData.assignedClass) ? "selected" : "";
-                    classSelect.innerHTML += `<option value="${cls}" ${isSelected}>${cls}</option>`;
-                });
-                
-                document.getElementById('editTeacherModal').classList.remove('hidden');
-            });
-        });
-
-        // Delete ബട്ടൺ വർക്ക് ചെയ്യാൻ
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const tId = e.target.getAttribute('data-id');
-                if(confirm("Are you sure you want to remove this teacher?")) { 
-                    await deleteDoc(doc(db, "users", tId)); 
-                    loadTeachers(); 
-                }
-            });
-        });
-    } catch (error) { console.error("Error loading teachers:", error); }
-}

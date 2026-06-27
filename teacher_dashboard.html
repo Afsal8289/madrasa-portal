@@ -67,13 +67,15 @@
         .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 12px; border-radius: 6px; font-size: 13px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
         .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
         
-        .pdf-wrapper { position: absolute; left: -9999px; top: 0; background: white; }
-        .pdf-area-standard { padding: 40px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
+        /* മാറ്റം 1: പിഡിഎഫ് കട്ടാവാതിരിക്കാനുള്ള പുതിയ സ്റ്റൈൽ */
+        .pdf-wrapper { position: absolute; left: 0; top: 0; z-index: -9999; opacity: 0; background: white; pointer-events: none; }
+        
+        .pdf-area-standard { padding: 20px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
         .pdf-header { text-align: center; margin-bottom: 20px; }
         .pdf-header h1 { margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; }
         .pdf-header h2 { margin: 5px 0 0 0; font-size: 16px; font-weight: bold; text-transform: uppercase; }
         
-        #pdfExportArea { width: 1000px; }
+        #pdfExportArea { width: 1000px; page-break-inside: avoid; }
         .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         .pdf-table th, .pdf-table td { border: 1px solid black; padding: 6px 4px; text-align: center; font-size: 14px; font-weight: bold; }
         .pdf-table th.name-col { text-align: center; width: 240px; }
@@ -81,18 +83,19 @@
         th.vertical-header { height: 160px; width: 45px; position: relative; padding: 0; vertical-align: middle; }
         th.vertical-header span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; display: inline-block; font-size: 13px; font-weight: bold; color: black; }
         
-        #pdfNoticeBoardArea { width: 1100px; }
+        #pdfNoticeBoardArea { width: 1400px; margin: 0 auto; }
         .nb-table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: Arial; }
         .nb-table th, .nb-table td { border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
         .nb-table th { background-color: #f0f0f0; }
         
-        /* ഡെസ്ക് ലേബൽ സെന്റർ അലൈൻമെൻ്റ് ശരിയാക്കി */
         #pdfDeskLabelsArea { width: 800px; padding: 20px; background: white; font-family: Arial; margin: 0 auto; }
         .desk-labels-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-        .desk-label-box { width: 31%; border: 2px solid #000; padding: 15px; box-sizing: border-box; border-radius: 8px; background: white; }
-        .desk-label-box p { margin: 8px 0; font-size: 16px; font-weight: bold; }
         
-        #pdfStudentListArea { width: 1000px; padding: 30px; }
+        /* മാറ്റം 2: ഡെസ്ക് ലേബലിൻ്റെ ഉയരം കൂട്ടി (ക്ലാസ് കട്ടാവാതിരിക്കാൻ) */
+        .desk-label-box { width: 31%; min-height: 145px; border: 2px solid #000; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; page-break-inside: avoid; break-inside: avoid; margin-bottom: 15px; }
+        .desk-label-box p { margin: 10px 0; font-size: 16px; font-weight: bold; }
+        
+        #pdfStudentListArea { width: 1100px; padding: 30px; }
 
         .pdf-summary-container { display: flex; justify-content: space-between; gap: 20px; width: 100%; margin-bottom: 20px; }
         .pdf-summary-box { width: 32%; border-collapse: collapse; text-align: center; font-size: 14px; }
@@ -169,8 +172,8 @@
                 </h3>
                 <div class="table-responsive">
                     <table class="data-table">
-                        <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th><th>Action</th></tr></thead>
-                        <tbody id="studentsTableBody"><tr><td colspan="8" style="text-align: center; padding: 20px;">Loading data...</td></tr></tbody>
+                        <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th><th>Action</th></tr></thead>
+                        <tbody id="studentsTableBody"><tr><td colspan="9" style="text-align: center; padding: 20px;">Loading data...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -345,7 +348,7 @@
         <div id="pdfStudentListArea" class="pdf-area-standard">
             <div class="pdf-header"><h1 id="pdfMadrasaName4">MADRASA</h1><h2 id="pdfClassTitle4">CLASS STUDENTS</h2></div>
             <table class="nb-table">
-                <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead>
+                <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead>
                 <tbody id="pdfStudentListBody"></tbody>
             </table>
         </div>
