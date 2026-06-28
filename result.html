@@ -400,32 +400,47 @@
 
       try {
           const docId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
-          const cacheSnap = await getDoc(doc(db, "result_cache", docId));
+          const localCacheKey = `resultData_${docId}`; // ബ്രൗസർ കാഷിന് വേണ്ടിയുള്ള കീ
 
-          if (!cacheSnap.exists()) {
-              document.getElementById("searchCard").style.display = "none";
-              document.getElementById("comingSoonCard").style.display = "block";
-              resetBtn(btn);
-              return;
-          }
-
-          const cacheData = cacheSnap.data();
+          let classResults = [];
           
-          let isPublished = cacheData.isPublished;
-          if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
-              isPublished = false;
-          }
+          // 1. ബ്രൗസറിൽ കാഷ് ഉണ്ടോ എന്ന് ആദ്യം പരിശോധിക്കുന്നു
+          const cachedString = sessionStorage.getItem(localCacheKey);
 
-          if (!isPublished) {
-              document.getElementById("searchCard").style.display = "none";
-              document.getElementById("comingSoonCard").style.display = "block";
-              resetBtn(btn);
-              return;
-          }
+          if (cachedString) {
+              // ബ്രൗസറിൽ ഡാറ്റ ഉണ്ടെങ്കിൽ അത് ഉപയോഗിക്കുന്നു (0 Reads in Firebase!)
+              classResults = JSON.parse(cachedString);
+          } else {
+              // 2. ബ്രൗസറിൽ ഇല്ലെങ്കിൽ മാത്രം ഫയർബേസിൽ നിന്ന് എടുക്കുന്നു (1 Read)
+              const cacheSnap = await getDoc(doc(db, "result_cache", docId));
 
-          const classResults = JSON.parse(cacheData.resultsData || "[]");
+              if (!cacheSnap.exists()) {
+                  document.getElementById("searchCard").style.display = "none";
+                  document.getElementById("comingSoonCard").style.display = "block";
+                  resetBtn(btn);
+                  return;
+              }
+
+              const cacheData = cacheSnap.data();
+              
+              let isPublished = cacheData.isPublished;
+              if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
+                  isPublished = false;
+              }
+
+              if (!isPublished) {
+                  document.getElementById("searchCard").style.display = "none";
+                  document.getElementById("comingSoonCard").style.display = "block";
+                  resetBtn(btn);
+                  return;
+              }
+
+              classResults = JSON.parse(cacheData.resultsData || "[]");
+              
+              // ഈ ഡാറ്റ ബ്രൗസറിൽ താൽക്കാലികമായി സേവ് ചെയ്യുന്നു (അടുത്ത തവണ ഉപയോഗിക്കാൻ)
+              sessionStorage.setItem(localCacheKey, JSON.stringify(classResults));
+          }
           
-          // റോൾ നമ്പറും ജെൻഡറും വെച്ച് കൃത്യമായി മാച്ച് ചെയ്യുന്നു (ഇതോടെ റോൾ നമ്പർ പ്രശ്നം മാറും)
           const targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
 
           if (!targetStudent) {
@@ -461,7 +476,6 @@
       document.getElementById("examTypeDisplay").innerText = term;
       document.getElementById("sName").innerText = student.studentName.toUpperCase();
       document.getElementById("sReg").innerText = student.admissionNo || "-";
-      // ക്ലാസ്സ് undefined വരുന്ന പ്രശ്നം ഒഴിവാക്കാൻ ക്ലാസ്സ് കൃത്യമായി കൊടുക്കുന്നു
       document.getElementById("sClass").innerText = student.className || selectedClass;
       document.getElementById("sAtt").innerText = student.attendance || "-";
 
