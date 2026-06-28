@@ -627,8 +627,6 @@ async function loadResults() {
     
     let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Att.</th>`;
     let pdfThs1 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
-    
-    // മാറ്റം 3: നോട്ടീസ് ബോർഡ് PDF ലും വെർട്ടിക്കൽ ടെക്സ്റ്റ് (മുകളിൽ നിന്ന് താഴേക്ക്) ആക്കി
     let pdfThs2 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
     
     classSubjects.forEach(sub => {
@@ -824,7 +822,7 @@ async function loadPublishSettings(term) {
     }
 }
 
-// മാറ്റം 4: പബ്ലിഷ് ചെയ്യുമ്പോൾ ആ ക്ലാസിലെ മുഴുവൻ റിസൾട്ടും ഒറ്റ കാഷ് ഫയലായി (JSON) സേവ് ചെയ്യുന്നു (1-Read System)
+// 📌 മാറ്റം: ക്ലാസിലെ എല്ലാ കുട്ടികൾക്കും (മാർക്ക് ഇല്ലെങ്കിലും) കൃത്യമായി റോൾ നമ്പർ നൽകി സേവ് ചെയ്യുന്നു
 document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
     const term = document.getElementById("publishTerm").value;
     const isPublished = document.getElementById("publishStatus").value === "published";
@@ -836,7 +834,6 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
     btn.disabled = true;
     
     try {
-        // 1. സേവ് പബ്ലിഷ് സ്റ്റാറ്റസ്
         await setDoc(doc(db, "publish_settings", docId), {
             madrasaUid,
             className: assignedClass,
@@ -845,43 +842,54 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
             publishDateTime
         });
         
-        // 2. പബ്ലിഷ് ചെയ്താൽ മാത്രം 1-Read Cache ക്രിയേറ്റ് ചെയ്യുക
         if (isPublished) {
-            // ആ ക്ലാസിലെ ഈ ടേമിലെ മുഴുവൻ മാർക്കുകളും ഫെച്ച് ചെയ്യുന്നു
             const marksQuery = query(collection(db, "marks"), 
                 where("madrasaUid", "==", madrasaUid), 
                 where("className", "==", assignedClass), 
                 where("term", "==", term));
             
             const marksSnap = await getDocs(marksQuery);
-            let classResults = [];
-            
+            let marksMap = {};
             marksSnap.forEach(doc => {
-                const data = doc.data();
-                // റിസൾട്ട് പേജിൽ കാണിക്കാൻ ആവശ്യമുള്ള ഡാറ്റ മാത്രം എടുക്കുന്നു
-                classResults.push({
-                    studentId: data.studentId,
-                    studentName: data.studentName,
-                    marks: data.marks,
-                    attendance: data.attendance,
-                    totalMarks: data.totalMarks,
-                    maxMarkTotal: data.maxMarkTotal,
-                    percentage: data.percentage,
-                    grade: data.grade,
-                    status: data.status,
-                    subjectConfig: data.subjectConfig
-                });
+                marksMap[doc.data().studentId] = doc.data();
+            });
+
+            // ക്ലാസ്സിലെ മുഴുവൻ കുട്ടികളെയും എടുത്ത് ഡാഷ്‌ബോർഡിലെ അതേ ഓർഡറിൽ സെറ്റ് ചെയ്യുന്നു
+            let allStudents = Object.values(studentsMap);
+            allStudents.sort((a, b) => {
+                if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
+                return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
             });
             
-            // റോൾ നമ്പർ കണ്ടുപിടിക്കാൻ അഡ്മിഷൻ നമ്പറും ജെൻഡറും കൂടി ചേർക്കുന്നു
-            for (let i = 0; i < classResults.length; i++) {
-                const stId = classResults[i].studentId;
-                const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === stId);
-                classResults[i].admissionNo = adNo || "";
-                classResults[i].gender = studentsMap[adNo]?.gender || "Male";
-            }
+            let classResults = [];
+            let boyRoll = 1, girlRoll = 1;
+
+            allStudents.forEach(st => {
+                let mData = marksMap[st.id];
+                let gen = st.gender || "Male";
+                let roll = gen === "Male" ? boyRoll++ : girlRoll++; // കൃത്യമായ റോൾ നമ്പർ
+
+                if (mData) {
+                    classResults.push({
+                        rollNo: roll, // റോൾ നമ്പർ ഇതിൽ സേവ് ചെയ്യുന്നു
+                        studentId: st.id,
+                        studentName: st.name,
+                        admissionNo: st.admissionNo,
+                        gender: gen,
+                        className: assignedClass, // ക്ലാസ്സും സേവ് ചെയ്യുന്നു
+                        marks: mData.marks,
+                        attendance: mData.attendance,
+                        totalMarks: mData.totalMarks,
+                        maxMarkTotal: mData.maxMarkTotal,
+                        percentage: mData.percentage,
+                        grade: mData.grade,
+                        status: mData.status,
+                        rank: mData.rank || "",
+                        subjectConfig: mData.subjectConfig
+                    });
+                }
+            });
             
-            // ഈ ഡാറ്റ ഒരു ഒറ്റ ഡോക്യുമെൻ്റ് ആയി സേവ് ചെയ്യുന്നു (ഇതാണ് കുട്ടി റീഡ് ചെയ്യുന്നത്)
             await setDoc(doc(db, "result_cache", docId), {
                 madrasaUid,
                 className: assignedClass,
@@ -889,7 +897,7 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
                 isPublished,
                 publishDateTime,
                 lastUpdated: new Date().toISOString(),
-                resultsData: JSON.stringify(classResults) // എല്ലാം ഒരു സ്ട്രിങ് ആയി സേവ് ചെയ്യുന്നു (Space ലാഭിക്കാൻ)
+                resultsData: JSON.stringify(classResults)
             });
         }
         
@@ -994,7 +1002,6 @@ document.getElementById("downloadDetailedPdfBtn").addEventListener("click", () =
 
 document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => {
     const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-    // മാറ്റം 5: നോട്ടീസ് ബോർഡ് PDF ഉം 'p' (പോട്രേറ്റ്) ആക്കി മാറ്റി
     generatePDF("pdfNoticeBoardArea", `Class_${assignedClass}_${term}_NoticeBoard.pdf`, 'p'); 
 });
 
