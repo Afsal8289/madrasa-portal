@@ -12,7 +12,9 @@
     
     <style>
         :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
-        body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* മാറ്റം 1: സ്ക്രീൻ വലത്തോട്ട് നീങ്ങാതിരിക്കാൻ overflow-x: hidden നൽകി */
+        html, body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; overflow-x: hidden; width: 100%; }
         *, *::before, *::after { box-sizing: inherit; }
         
         .header { background-color: var(--card-bg); color: var(--primary-dark); padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px; }
@@ -74,7 +76,8 @@
         .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
         .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
         
-        .pdf-wrapper { position: absolute; left: 0; top: 0; z-index: -9999; opacity: 0; background: white; pointer-events: none; }
+        /* മാറ്റം 2: PDF wrapper സ്ക്രീനിൽ നിന്ന് പൂർണ്ണമായും പുറത്തേക്ക് മാറ്റി (left: -9999px) */
+        .pdf-wrapper { position: absolute; left: -9999px; top: -9999px; z-index: -9999; opacity: 0; background: white; pointer-events: none; }
         
         .pdf-area-standard { padding: 20px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
         .pdf-header { text-align: center; margin-bottom: 20px; }
@@ -89,8 +92,7 @@
         th.vertical-header { height: 150px; width: 40px; position: relative; padding: 0; vertical-align: middle; }
         th.vertical-header span { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; display: inline-block; font-size: 12px; font-weight: bold; color: black; }
         
-        /* മാറ്റം 2: നോട്ടീസ് ബോർഡ് PDF പോട്രേറ്റ് ആക്കി, മാർക്ക് ലിസ്റ്റിലെ പോലെ വെർട്ടിക്കൽ ടെക്സ്റ്റ് നൽകി */
-        #pdfNoticeBoardArea { width: 1000px; margin: 0 auto; } /* ലാൻഡ്സ്കേപ്പ് വീതി (1400px) കുറച്ച് പോട്രേറ്റ് (1000px) ആക്കി */
+        #pdfNoticeBoardArea { width: 1000px; margin: 0 auto; } 
         .nb-table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: Arial; }
         .nb-table th, .nb-table td { border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
         .nb-table th { background-color: #f0f0f0; }
