@@ -299,7 +299,6 @@ async function loadStudents() {
         const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
         const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
         
-        // മാറ്റം: ഡെസ്ക് ലേബലിൻ്റെ സ്പേസിംഗ് കൂട്ടി
         currentChunk += `
             <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 145px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
                 <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
@@ -309,7 +308,6 @@ async function loadStudents() {
         `;
         labelCount++;
 
-        // മാറ്റം: ഒരു പേജിൽ 18 കുട്ടികൾ മാത്രം (കട്ടാവാതിരിക്കാൻ)
         if (labelCount % 18 === 0) {
             deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
             currentChunk = "";
@@ -629,17 +627,19 @@ async function loadResults() {
     
     let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Att.</th>`;
     let pdfThs1 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
-    let pdfThs2 = `<tr><th>Roll No</th><th>Ad.No</th><th style="text-align:left;">Name of Students</th><th>Att.</th>`;
+    
+    // മാറ്റം 3: നോട്ടീസ് ബോർഡ് PDF ലും വെർട്ടിക്കൽ ടെക്സ്റ്റ് (മുകളിൽ നിന്ന് താഴേക്ക്) ആക്കി
+    let pdfThs2 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
     
     classSubjects.forEach(sub => {
         ths += `<th>${sub.name}</th>`;
         pdfThs1 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
-        pdfThs2 += `<th>${sub.name.toUpperCase()}</th>`;
+        pdfThs2 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
     });
     
     ths += `<th>Total</th><th>Rank</th><th>Grade</th><th>Status</th><th>Action</th></tr>`;
     pdfThs1 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
-    pdfThs2 += `<th>Total</th><th>Rank</th><th>Grade</th><th>Status</th></tr>`;
+    pdfThs2 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
     
     document.getElementById("screenResultHead").innerHTML = ths;
     document.getElementById("pdfThead1").innerHTML = pdfThs1;
@@ -762,9 +762,9 @@ async function loadResults() {
             <td>${attendanceDisp}</td>${marksHTMLPdf1}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
             <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
             
-        pBody2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
+        pBody2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
             <td>${attendanceDisp}</td>${marksHTMLPdf2}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
-            <td style="font-weight:bold;">${displayGrade}</td><td style="color:${statusColor}; font-weight:bold;">${statusText}</td></tr>`;
+            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
     });
     
     document.getElementById("screenResultBody").innerHTML = sBody;
@@ -824,14 +824,19 @@ async function loadPublishSettings(term) {
     }
 }
 
+// മാറ്റം 4: പബ്ലിഷ് ചെയ്യുമ്പോൾ ആ ക്ലാസിലെ മുഴുവൻ റിസൾട്ടും ഒറ്റ കാഷ് ഫയലായി (JSON) സേവ് ചെയ്യുന്നു (1-Read System)
 document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
     const term = document.getElementById("publishTerm").value;
     const isPublished = document.getElementById("publishStatus").value === "published";
     const publishDateTime = document.getElementById("publishDateTime").value;
     const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
+    const btn = document.getElementById("savePublishSettingsBtn");
     
-    document.getElementById("savePublishSettingsBtn").textContent = "Saving...";
+    btn.textContent = "Saving & Syncing Cache...";
+    btn.disabled = true;
+    
     try {
+        // 1. സേവ് പബ്ലിഷ് സ്റ്റാറ്റസ്
         await setDoc(doc(db, "publish_settings", docId), {
             madrasaUid,
             className: assignedClass,
@@ -839,15 +844,66 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
             isPublished,
             publishDateTime
         });
-        alert(`Settings for ${term} saved successfully!`);
+        
+        // 2. പബ്ലിഷ് ചെയ്താൽ മാത്രം 1-Read Cache ക്രിയേറ്റ് ചെയ്യുക
+        if (isPublished) {
+            // ആ ക്ലാസിലെ ഈ ടേമിലെ മുഴുവൻ മാർക്കുകളും ഫെച്ച് ചെയ്യുന്നു
+            const marksQuery = query(collection(db, "marks"), 
+                where("madrasaUid", "==", madrasaUid), 
+                where("className", "==", assignedClass), 
+                where("term", "==", term));
+            
+            const marksSnap = await getDocs(marksQuery);
+            let classResults = [];
+            
+            marksSnap.forEach(doc => {
+                const data = doc.data();
+                // റിസൾട്ട് പേജിൽ കാണിക്കാൻ ആവശ്യമുള്ള ഡാറ്റ മാത്രം എടുക്കുന്നു
+                classResults.push({
+                    studentId: data.studentId,
+                    studentName: data.studentName,
+                    marks: data.marks,
+                    attendance: data.attendance,
+                    totalMarks: data.totalMarks,
+                    maxMarkTotal: data.maxMarkTotal,
+                    percentage: data.percentage,
+                    grade: data.grade,
+                    status: data.status,
+                    subjectConfig: data.subjectConfig
+                });
+            });
+            
+            // റോൾ നമ്പർ കണ്ടുപിടിക്കാൻ അഡ്മിഷൻ നമ്പറും ജെൻഡറും കൂടി ചേർക്കുന്നു
+            for (let i = 0; i < classResults.length; i++) {
+                const stId = classResults[i].studentId;
+                const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === stId);
+                classResults[i].admissionNo = adNo || "";
+                classResults[i].gender = studentsMap[adNo]?.gender || "Male";
+            }
+            
+            // ഈ ഡാറ്റ ഒരു ഒറ്റ ഡോക്യുമെൻ്റ് ആയി സേവ് ചെയ്യുന്നു (ഇതാണ് കുട്ടി റീഡ് ചെയ്യുന്നത്)
+            await setDoc(doc(db, "result_cache", docId), {
+                madrasaUid,
+                className: assignedClass,
+                term,
+                isPublished,
+                publishDateTime,
+                lastUpdated: new Date().toISOString(),
+                resultsData: JSON.stringify(classResults) // എല്ലാം ഒരു സ്ട്രിങ് ആയി സേവ് ചെയ്യുന്നു (Space ലാഭിക്കാൻ)
+            });
+        }
+        
+        alert(`Settings & Cache for ${term} synced successfully!\nStudents can now check results instantly.`);
         loadPublishSettings(term);
     } catch(e) {
-        alert("Error saving settings");
+        console.error(e);
+        alert("Error saving settings & cache.");
     }
-    document.getElementById("savePublishSettingsBtn").textContent = "Save Publish Settings";
+    
+    btn.textContent = "Save & Sync Cache";
+    btn.disabled = false;
 });
 
-// മാറ്റം 3: PDF കട്ടാവുന്ന പ്രശ്നവും വലിയ ലിസ്റ്റുകൾ Auto-Scale ആക്കുന്ന കോഡും 
 async function generatePDF(areaId, fileName, orientation = 'p') {
     const area = document.getElementById(areaId);
     const wrapper = area.parentElement;
@@ -856,7 +912,6 @@ async function generatePDF(areaId, fileName, orientation = 'p') {
     const origZ = wrapper.style.zIndex;
     const origOpacity = wrapper.style.opacity;
     
-    // PDF ജനറേറ്റ് ചെയ്യാൻ വേണ്ടിയുള്ള സുരക്ഷിതമായ പൊസിഷൻ
     wrapper.style.position = "absolute"; 
     wrapper.style.zIndex = "-1";
     wrapper.style.opacity = "1";
@@ -885,7 +940,6 @@ async function generatePDF(areaId, fileName, orientation = 'p') {
                 let imgWidth = pdfWidth - 10;
                 let imgHeight = (canvas.height * imgWidth) / canvas.width;
                 
-                // ഒരു പേജിൽ ഉൾക്കൊള്ളാൻ ഓട്ടോമാറ്റിക് ആയി സൈസ് കുറയ്ക്കുന്നു
                 if (imgHeight > (pdfHeight - 10)) {
                     let ratio = (pdfHeight - 10) / imgHeight;
                     imgHeight = imgHeight * ratio;
@@ -913,7 +967,6 @@ async function generatePDF(areaId, fileName, orientation = 'p') {
         let imgWidth = pdfWidth - 10;
         let imgHeight = (canvas.height * imgWidth) / canvas.width;
         
-        // 40 കുട്ടികൾ ആണെങ്കിലും ഒരു പേജിൽ തന്നെ ഉൾക്കൊള്ളാനുള്ള കോഡ്
         if (imgHeight > (pdfHeight - 10)) {
             let ratio = (pdfHeight - 10) / imgHeight;
             imgHeight = imgHeight * ratio;
@@ -941,7 +994,8 @@ document.getElementById("downloadDetailedPdfBtn").addEventListener("click", () =
 
 document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => {
     const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-    generatePDF("pdfNoticeBoardArea", `Class_${assignedClass}_${term}_NoticeBoard.pdf`, 'l'); 
+    // മാറ്റം 5: നോട്ടീസ് ബോർഡ് PDF ഉം 'p' (പോട്രേറ്റ്) ആക്കി മാറ്റി
+    generatePDF("pdfNoticeBoardArea", `Class_${assignedClass}_${term}_NoticeBoard.pdf`, 'p'); 
 });
 
 document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () => {

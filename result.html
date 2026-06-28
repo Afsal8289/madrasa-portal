@@ -38,7 +38,7 @@
       color: #ffffff; padding: 30px 20px 35px; text-align: center;
       position: relative; z-index: 1;
     }
-    .header-bg.result-mode { padding: 20px 15px 25px; } /* Small padding for result view */
+    .header-bg.result-mode { padding: 20px 15px 25px; }
 
     .header-bg::before {
       content: ''; position: absolute; top: -20px; left: -20px;
@@ -68,7 +68,6 @@
     }
     .content-area.result-mode { padding: 15px; margin-top: -15px; }
 
-    /* Search Form Styles */
     .input-group { margin-bottom: 16px; }
     .input-group label { display: block; font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; }
     .input-wrapper { position: relative; }
@@ -93,7 +92,6 @@
     }
     button.view:hover { background: #0f172a; transform: translateY(-1px); }
 
-    /* Result Card Styles (New Premium Look) */
     .student-box {
       background: #ffffff; border: 1px solid #f1f5f9; box-shadow: 0 2px 10px rgba(0,0,0,0.02);
       border-radius: 12px; padding: 12px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;
@@ -135,7 +133,6 @@
     .btn-img:hover { background: #0f172a; box-shadow: 0 4px 12px rgba(30, 41, 59, 0.3); }
     .hide-for-capture { display: none !important; }
 
-    /* Other elements */
     #invalidLinkMsg { display: none; text-align: center; color: #ef4444; font-weight: 700; background: #fee2e2; padding: 15px; border-radius: 12px; border: 1px solid #f87171; width: 100%; max-width: 420px; margin-bottom: 20px;}
     .footer { text-align: center; font-size: 11px; font-weight: 600; color: #64748b; margin-top: 20px; }
     
@@ -312,61 +309,72 @@
   }
 
   async function verifyAndLoadMadrasa(mid) {
-      try {
-          mid = String(mid).trim();
-          let adminDocSnap = null;
+    try {
+        mid = String(mid).trim();
+        const formWrapper = document.getElementById("searchCard");
+        const invalidMsg = document.getElementById("invalidLinkMsg");
+        const classSelect = document.getElementById("studentClass");
+        
+        let adminDocSnap = null;
 
-          if (mid.length > 15) {
-              const directDoc = await getDoc(doc(db, "users", mid));
-              if (directDoc.exists() && directDoc.data().classes) {
-                  actualAdminUid = mid;
-                  adminDocSnap = directDoc;
-              }
-          }
+        if (mid.length > 15) {
+            const directDoc = await getDoc(doc(db, "users", mid));
+            if (directDoc.exists() && directDoc.data().classes) {
+                actualAdminUid = mid;
+                adminDocSnap = directDoc;
+            }
+        }
 
-          if (!actualAdminUid) {
-              const variations = [mid, mid.toUpperCase(), mid.toLowerCase()];
-              if (!isNaN(mid) && mid !== "") variations.push(Number(mid));
-              const uniqueVariations = [...new Set(variations)];
+        if (!actualAdminUid) {
+            const variations = [mid, mid.toUpperCase(), mid.toLowerCase()];
+            if (!isNaN(mid) && mid !== "") variations.push(Number(mid));
+            const uniqueVariations = [...new Set(variations)];
 
-              for (let v of uniqueVariations) {
-                  const q = query(collection(db, "users"), where("madrasaId", "==", v));
-                  const querySnapshot = await getDocs(q);
-                  
-                  if (!querySnapshot.empty) {
-                      const adminDoc = querySnapshot.docs.find(d => d.data().classes);
-                      if (adminDoc) {
-                          actualAdminUid = adminDoc.id;
-                          adminDocSnap = adminDoc;
-                          break;
-                      }
-                  }
-              }
-          }
+            for (let v of uniqueVariations) {
+                const q = query(collection(db, "users"), where("madrasaId", "==", v));
+                const querySnapshot = await getDocs(q);
+                
+                if (!querySnapshot.empty) {
+                    const adminDoc = querySnapshot.docs.find(d => d.data().classes);
+                    if (adminDoc) {
+                        actualAdminUid = adminDoc.id;
+                        adminDocSnap = adminDoc;
+                        break;
+                    }
+                }
+            }
+        }
 
-          if (actualAdminUid && adminDocSnap) {
-              document.getElementById("searchCard").style.display = "block";
-              const data = adminDocSnap.data();
-              document.getElementById("madrasaNameDisplay").innerText = data.madrasaName || "Madrasa Name";
-              document.getElementById("madNameResult").innerText = data.madrasaName || "Madrasa Name";
-              
-              const classSelect = document.getElementById("studentClass");
-              if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
-                  const classes = data.classes;
-                  classSelect.innerHTML = '<option value="">-- Select Class --</option>';
-                  classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
-                  classes.forEach(c => { classSelect.innerHTML += `<option value="${c}">${c}</option>`; });
-              } else {
-                  classSelect.innerHTML = '<option value="">No classes available</option>';
-              }
-          } else {
-              document.getElementById("invalidLinkMsg").style.display = "block";
-          }
-      } catch (error) {
-          document.getElementById("invalidLinkMsg").style.display = "block";
-      }
+        if (actualAdminUid && adminDocSnap) {
+            formWrapper.style.display = "block";
+            if (invalidMsg) invalidMsg.style.display = "none";
+            
+            const data = adminDocSnap.data();
+            document.getElementById("madrasaNameDisplay").innerText = data.madrasaName || "Madrasa Name";
+            document.getElementById("madNameResult").innerText = data.madrasaName || "Madrasa Name";
+            
+            if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+                const classes = data.classes;
+                classSelect.innerHTML = '<option value="">-- Select Class --</option>';
+                classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+                classes.forEach(c => {
+                    classSelect.innerHTML += `<option value="${c}">${c}</option>`;
+                });
+            } else {
+                classSelect.innerHTML = '<option value="">No classes available</option>';
+            }
+        } else {
+            formWrapper.style.display = "none";
+            if (invalidMsg) invalidMsg.style.display = "block";
+        }
+        
+    } catch (error) {
+        console.error(error);
+        document.getElementById("invalidLinkMsg").style.display = "block";
+    }
   }
 
+  // മാറ്റം: വെറും 1 റീഡ് മാത്രം എടുക്കുന്ന പുതിയ ചെക്കിങ് ലോജിക് (1-Read System)
   document.getElementById("viewBtn").addEventListener("click", async () => {
       if (!actualAdminUid) return;
 
@@ -385,25 +393,31 @@
           alert("Invalid Roll Number");
           return;
       }
-      currentRollNo = rollNo; // സേവ് ഇമേജ് ഫയലിന്റെ പേരിനായി സൂക്ഷിക്കുന്നു
+      currentRollNo = rollNo;
 
       const btn = document.getElementById("viewBtn");
       btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Checking...`;
       btn.disabled = true;
 
       try {
-          const publishDocId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
-          const pubSnap = await getDoc(doc(db, "publish_settings", publishDocId));
+          const docId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
           
-          let isPublished = false;
-          if (pubSnap.exists()) {
-              const pData = pubSnap.data();
-              if (pData.isPublished) {
-                  isPublished = true;
-                  if (pData.publishDateTime && new Date(pData.publishDateTime) > new Date()) {
-                      isPublished = false;
-                  }
-              }
+          // ➡️ ഇതാണ് ആ ഒരൊറ്റ റീഡ്! (പബ്ലിഷ് സ്റ്റാറ്റസും മാർക്കുകളും എല്ലാം ഇതിലുണ്ട്)
+          const cacheSnap = await getDoc(doc(db, "result_cache", docId));
+
+          if (!cacheSnap.exists()) {
+              document.getElementById("searchCard").style.display = "none";
+              document.getElementById("comingSoonCard").style.display = "block";
+              resetBtn(btn);
+              return;
+          }
+
+          const cacheData = cacheSnap.data();
+          
+          // സമയം ഷെഡ്യൂൾ ചെയ്തിട്ടുണ്ടോ എന്ന് നോക്കുന്നു
+          let isPublished = cacheData.isPublished;
+          if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
+              isPublished = false;
           }
 
           if (!isPublished) {
@@ -413,34 +427,30 @@
               return;
           }
 
-          const stuQuery = query(collection(db, "students"), 
-                                 where("madrasaUid", "==", actualAdminUid), 
-                                 where("className", "==", cls),
-                                 where("gender", "==", gender));
-          const stuSnap = await getDocs(stuQuery);
+          // JSON സ്ട്രിങ് തിരികെ ലിസ്റ്റ് ആക്കി മാറ്റുന്നു
+          const classResults = JSON.parse(cacheData.resultsData || "[]");
           
-          let students = [];
-          stuSnap.forEach(d => students.push({ id: d.id, ...d.data() }));
+          // ഈ ക്ലാസിലെ ഈ ജെൻഡറിലുള്ള കുട്ടികളെ മാത്രം ഫിൽട്ടർ ചെയ്യുന്നു
+          let filteredStudents = classResults.filter(s => s.gender === gender);
 
-          if (students.length === 0 || rollNo > students.length) {
+          // അഡ്മിഷൻ നമ്പർ വെച്ച് സോർട്ട് ചെയ്യുന്നു (ടീച്ചർ പാനലിലെ അതേ ഓർഡർ ലഭിക്കാൻ)
+          filteredStudents.sort((a, b) => String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true}));
+
+          if (filteredStudents.length === 0 || rollNo > filteredStudents.length) {
               alert("Student not found! Incorrect Roll Number or Class/Gender selection.");
               resetBtn(btn);
               return;
           }
 
-          students.sort((a, b) => String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true}));
-          const targetStudent = students[rollNo - 1]; 
+          const targetStudent = filteredStudents[rollNo - 1];
           
-          const markDocId = `${targetStudent.id}_${term.replace(/\s+/g, '')}`;
-          const markSnap = await getDoc(doc(db, "marks", markDocId));
-
-          if (!markSnap.exists()) {
+          if (targetStudent.totalMarks === "" && targetStudent.status === "") {
               alert("Result not found! Marks have not been entered for this student yet.");
               resetBtn(btn);
               return;
           }
 
-          displayResult(targetStudent, markSnap.data(), rollNo);
+          displayResult(targetStudent, term, rollNo);
           
       } catch (error) {
           console.error(error);
@@ -454,42 +464,44 @@
       btn.disabled = false;
   }
 
-  function displayResult(student, markData, rollNo) {
+  function displayResult(student, term, rollNo) {
       document.getElementById("searchCard").style.display = "none";
       document.getElementById("resultDisplayCard").style.display = "block";
 
-      document.getElementById("examTypeDisplay").innerText = markData.term;
-      document.getElementById("sName").innerText = student.name.toUpperCase();
+      document.getElementById("examTypeDisplay").innerText = term;
+      document.getElementById("sName").innerText = student.studentName.toUpperCase();
       document.getElementById("sReg").innerText = student.admissionNo || "-";
       document.getElementById("sClass").innerText = student.className;
-      document.getElementById("sAtt").innerText = markData.attendance || "-";
+      document.getElementById("sAtt").innerText = student.attendance || "-";
 
       let marksHtml = "";
-      const subjects = markData.subjectConfig || [];
-      const marks = markData.marks || {};
+      const subjects = student.subjectConfig || [];
+      const marks = student.marks || {};
+
+      let rankCount = 1;
 
       subjects.forEach(sub => {
-          let markVal = marks[sub.name] !== undefined ? marks[sub.name] : "-";
+          let markVal = marks[sub.name] !== undefined ? marks[sub.name] : "";
           let color = "#0f172a";
-          if (markVal === "A" || (Number(markVal) < sub.passMark && markVal !== "-")) {
-              color = "#dc2626"; // Fail red
+          if (markVal === "A" || (markVal !== "" && Number(markVal) < sub.passMark)) {
+              color = "#dc2626";
           }
-          marksHtml += `<tr><td>${sub.name}</td><td class="td-center" style="color:${color};">${markVal} <span style="font-size:10px; color:#94a3b8; font-weight:600;">/ ${sub.maxMark}</span></td></tr>`;
+          marksHtml += `<tr><td>${sub.name}</td><td class="td-center" style="color:${color}; font-weight:bold;">${markVal} <span style="font-size:10px; color:#94a3b8; font-weight:600;">/ ${sub.maxMark}</span></td></tr>`;
       });
 
       document.getElementById("marksTableBody").innerHTML = marksHtml;
 
-      document.getElementById("sTotal").innerText = `${markData.totalMarks}/${markData.maxMarkTotal}`;
-      document.getElementById("sRank").innerText = "-"; // Rank calculation can be added if needed globally
-      document.getElementById("sGrade").innerText = markData.grade;
+      document.getElementById("sTotal").innerText = `${student.totalMarks}/${student.maxMarkTotal}`;
+      document.getElementById("sRank").innerText = student.status === "Failed" ? "-" : (student.rank || "-");
+      document.getElementById("sGrade").innerText = student.grade || "-";
 
       const statusEl = document.getElementById("sStatus");
-      statusEl.className = "st-val"; // Reset classes
+      statusEl.className = "st-val";
       
-      if (markData.status === "Failed") {
+      if (student.status === "Failed") {
           statusEl.innerText = "FAILED";
           statusEl.classList.add("status-fail");
-      } else if (markData.status === "Promoted") {
+      } else if (student.status === "Promoted") {
           statusEl.innerText = "PROMOTED";
           statusEl.classList.add("status-prom");
       } else {
@@ -527,7 +539,6 @@
         link.click();
       });
   }
-
 </script>
 
 </body>
