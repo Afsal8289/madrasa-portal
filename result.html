@@ -374,7 +374,6 @@
     }
   }
 
-  // മാറ്റം: വെറും 1 റീഡ് മാത്രം എടുക്കുന്ന പുതിയ ചെക്കിങ് ലോജിക് (1-Read System)
   document.getElementById("viewBtn").addEventListener("click", async () => {
       if (!actualAdminUid) return;
 
@@ -401,8 +400,6 @@
 
       try {
           const docId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
-          
-          // ➡️ ഇതാണ് ആ ഒരൊറ്റ റീഡ്! (പബ്ലിഷ് സ്റ്റാറ്റസും മാർക്കുകളും എല്ലാം ഇതിലുണ്ട്)
           const cacheSnap = await getDoc(doc(db, "result_cache", docId));
 
           if (!cacheSnap.exists()) {
@@ -414,7 +411,6 @@
 
           const cacheData = cacheSnap.data();
           
-          // സമയം ഷെഡ്യൂൾ ചെയ്തിട്ടുണ്ടോ എന്ന് നോക്കുന്നു
           let isPublished = cacheData.isPublished;
           if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
               isPublished = false;
@@ -427,30 +423,24 @@
               return;
           }
 
-          // JSON സ്ട്രിങ് തിരികെ ലിസ്റ്റ് ആക്കി മാറ്റുന്നു
           const classResults = JSON.parse(cacheData.resultsData || "[]");
           
-          // ഈ ക്ലാസിലെ ഈ ജെൻഡറിലുള്ള കുട്ടികളെ മാത്രം ഫിൽട്ടർ ചെയ്യുന്നു
-          let filteredStudents = classResults.filter(s => s.gender === gender);
+          // റോൾ നമ്പറും ജെൻഡറും വെച്ച് കൃത്യമായി മാച്ച് ചെയ്യുന്നു (ഇതോടെ റോൾ നമ്പർ പ്രശ്നം മാറും)
+          const targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
 
-          // അഡ്മിഷൻ നമ്പർ വെച്ച് സോർട്ട് ചെയ്യുന്നു (ടീച്ചർ പാനലിലെ അതേ ഓർഡർ ലഭിക്കാൻ)
-          filteredStudents.sort((a, b) => String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true}));
-
-          if (filteredStudents.length === 0 || rollNo > filteredStudents.length) {
+          if (!targetStudent) {
               alert("Student not found! Incorrect Roll Number or Class/Gender selection.");
               resetBtn(btn);
               return;
           }
 
-          const targetStudent = filteredStudents[rollNo - 1];
-          
           if (targetStudent.totalMarks === "" && targetStudent.status === "") {
               alert("Result not found! Marks have not been entered for this student yet.");
               resetBtn(btn);
               return;
           }
 
-          displayResult(targetStudent, term, rollNo);
+          displayResult(targetStudent, term, rollNo, cls);
           
       } catch (error) {
           console.error(error);
@@ -464,21 +454,20 @@
       btn.disabled = false;
   }
 
-  function displayResult(student, term, rollNo) {
+  function displayResult(student, term, rollNo, selectedClass) {
       document.getElementById("searchCard").style.display = "none";
       document.getElementById("resultDisplayCard").style.display = "block";
 
       document.getElementById("examTypeDisplay").innerText = term;
       document.getElementById("sName").innerText = student.studentName.toUpperCase();
       document.getElementById("sReg").innerText = student.admissionNo || "-";
-      document.getElementById("sClass").innerText = student.className;
+      // ക്ലാസ്സ് undefined വരുന്ന പ്രശ്നം ഒഴിവാക്കാൻ ക്ലാസ്സ് കൃത്യമായി കൊടുക്കുന്നു
+      document.getElementById("sClass").innerText = student.className || selectedClass;
       document.getElementById("sAtt").innerText = student.attendance || "-";
 
       let marksHtml = "";
       const subjects = student.subjectConfig || [];
       const marks = student.marks || {};
-
-      let rankCount = 1;
 
       subjects.forEach(sub => {
           let markVal = marks[sub.name] !== undefined ? marks[sub.name] : "";
