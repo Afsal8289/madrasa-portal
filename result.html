@@ -400,18 +400,17 @@
 
       try {
           const docId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
-          const localCacheKey = `resultData_${docId}`; // ബ്രൗസർ കാഷിന് വേണ്ടിയുള്ള കീ
+          const localCacheKey = `resultData_${docId}`; 
 
           let classResults = [];
+          let usedLocalCache = false;
           
-          // 1. ബ്രൗസറിൽ കാഷ് ഉണ്ടോ എന്ന് ആദ്യം പരിശോധിക്കുന്നു
           const cachedString = sessionStorage.getItem(localCacheKey);
 
           if (cachedString) {
-              // ബ്രൗസറിൽ ഡാറ്റ ഉണ്ടെങ്കിൽ അത് ഉപയോഗിക്കുന്നു (0 Reads in Firebase!)
               classResults = JSON.parse(cachedString);
+              usedLocalCache = true;
           } else {
-              // 2. ബ്രൗസറിൽ ഇല്ലെങ്കിൽ മാത്രം ഫയർബേസിൽ നിന്ന് എടുക്കുന്നു (1 Read)
               const cacheSnap = await getDoc(doc(db, "result_cache", docId));
 
               if (!cacheSnap.exists()) {
@@ -422,7 +421,6 @@
               }
 
               const cacheData = cacheSnap.data();
-              
               let isPublished = cacheData.isPublished;
               if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
                   isPublished = false;
@@ -436,12 +434,21 @@
               }
 
               classResults = JSON.parse(cacheData.resultsData || "[]");
-              
-              // ഈ ഡാറ്റ ബ്രൗസറിൽ താൽക്കാലികമായി സേവ് ചെയ്യുന്നു (അടുത്ത തവണ ഉപയോഗിക്കാൻ)
               sessionStorage.setItem(localCacheKey, JSON.stringify(classResults));
           }
           
-          const targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
+          let targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
+
+          // മാറ്റം: ഫോണിലെ സേവ് ആയ ഡാറ്റയിൽ കുട്ടിയെ കണ്ടില്ലെങ്കിൽ ഒന്നുകൂടി ഫയർബേസിൽ പോയി നോക്കും
+          if (!targetStudent && usedLocalCache) {
+              const cacheSnap = await getDoc(doc(db, "result_cache", docId));
+              if (cacheSnap.exists()) {
+                  const cacheData = cacheSnap.data();
+                  classResults = JSON.parse(cacheData.resultsData || "[]");
+                  sessionStorage.setItem(localCacheKey, JSON.stringify(classResults)); // അപ്ഡേറ്റ് ചെയ്യുന്നു
+                  targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
+              }
+          }
 
           if (!targetStudent) {
               alert("Student not found! Incorrect Roll Number or Class/Gender selection.");
