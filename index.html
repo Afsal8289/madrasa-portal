@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Madrasa Portal - Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
     <style>
-        /* ലോഗിൻ ടാബുകൾക്കുള്ള പുതിയ ഡിസൈൻ */
+        /* ലോഗിൻ ടാബുകൾക്കുള്ള ഡിസൈൻ */
         .tab-container { display: flex; gap: 10px; margin-bottom: 20px; }
         .tab-btn { flex: 1; padding: 12px; border: none; background: #e2e8f0; border-radius: 8px; cursor: pointer; font-weight: 600; color: #64748b; font-family: 'Poppins', sans-serif; transition: 0.3s; }
         .tab-btn.active { background: #2c3e50; color: white; }
@@ -27,10 +28,11 @@
             transform: translateY(-50%);
             cursor: pointer;
             font-size: 16px;
+            color: #64748b;
             user-select: none;
-            opacity: 0.7;
+            transition: 0.3s;
         }
-        .toggle-password:hover { opacity: 1; }
+        .toggle-password:hover { color: #2c3e50; }
     </style>
 </head>
 <body>
@@ -39,13 +41,11 @@
         <h2 style="margin-top: 0; color: #2c3e50;">Madrasa Portal</h2>
         <p style="color: #64748b; font-size: 14px; margin-bottom: 25px;">Please select your role to log in</p>
         
-        <!-- Tabs -->
         <div class="tab-container">
             <button class="tab-btn active" id="tabTeacher">Teacher</button>
             <button class="tab-btn" id="tabAdmin">Admin</button>
         </div>
 
-        <!-- 1. Teacher Login Form -->
         <div id="teacherForm" class="login-form">
             <div class="input-group">
                 <input type="text" id="tMadrasaId" placeholder="Madrasa ID (e.g. 1050)" required>
@@ -55,19 +55,18 @@
             </div>
             <div class="input-group">
                 <input type="password" id="tPassword" placeholder="Password" required>
-                <span class="toggle-password" onclick="togglePassword('tPassword', this)">👁️</span>
+                <i class="fas fa-eye toggle-password" onclick="togglePassword('tPassword', this)"></i>
             </div>
             <button id="loginTeacherBtn">Login as Teacher</button>
         </div>
 
-        <!-- 2. Admin Login Form -->
         <div id="adminForm" class="login-form hidden">
             <div class="input-group">
                 <input type="email" id="email" placeholder="Admin Email" required>
             </div>
             <div class="input-group">
                 <input type="password" id="password" placeholder="Password" required>
-                <span class="toggle-password" onclick="togglePassword('password', this)">👁️</span>
+                <i class="fas fa-eye toggle-password" onclick="togglePassword('password', this)"></i>
             </div>
             <button id="loginAdminBtn">Login as Admin</button>
         </div>
@@ -75,9 +74,7 @@
         <p id="errorMessage" style="color: #e74c3c; font-size: 13px; margin-top: 15px; font-weight: 600;"></p>
     </div>
 
-    <!-- UI Toggle Script -->
     <script>
-        // Tab മാറ്റാനുള്ള കോഡ്
         const tabTeacher = document.getElementById('tabTeacher');
         const tabAdmin = document.getElementById('tabAdmin');
         const teacherForm = document.getElementById('teacherForm');
@@ -96,17 +93,30 @@
             errorMsg.innerText = '';
         });
 
-        // പാസ്‌വേർഡ് കാണാനും മറയ്ക്കാനുമുള്ള ഫംഗ്ഷൻ
+        // പാസ്‌വേർഡ് കാണാനും മറയ്ക്കാനുമുള്ള ഫംഗ്ഷൻ (ഐക്കൺ മാറുന്ന രീതി)
         function togglePassword(inputId, iconElement) {
             const inputField = document.getElementById(inputId);
             if (inputField.type === "password") {
                 inputField.type = "text";
-                iconElement.innerText = "🙈"; // പാസ്‌വേർഡ് കാണുമ്പോൾ ഐക്കൺ മാറും
+                iconElement.classList.remove("fa-eye");
+                iconElement.classList.add("fa-eye-slash"); // പാസ്‌വേർഡ് കാണുമ്പോൾ ഐക്കൺ മാറും
             } else {
                 inputField.type = "password";
-                iconElement.innerText = "👁️";
+                iconElement.classList.remove("fa-eye-slash");
+                iconElement.classList.add("fa-eye");
             }
         }
+
+        // മാറ്റം 2: ലോഗിൻ ചെയ്യുമ്പോൾ പഴയ മെമ്മറികൾ ക്ലിയർ ചെയ്യാനുള്ള കോഡ്
+        document.getElementById('loginTeacherBtn').addEventListener('click', function() {
+            localStorage.clear();
+            sessionStorage.clear();
+        });
+
+        document.getElementById('loginAdminBtn').addEventListener('click', function() {
+            localStorage.clear();
+            sessionStorage.clear();
+        });
     </script>
     
     <script type="module" src="app.js"></script>
