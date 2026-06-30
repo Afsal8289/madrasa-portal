@@ -70,6 +70,78 @@ function formatDate(dateStr) {
     return dateStr;
 }
 
+// 📌 പുതിയ മാറ്റം: ബാക്ക്ഗ്രൗണ്ടിൽ തനിയെ കാഷ് അപ്ഡേറ്റ് ചെയ്യാനുള്ള സെൻട്രലൈസ്ഡ് ഫംഗ്ഷൻ
+async function syncResultCache(term) {
+    if (!madrasaUid || !assignedClass || !term) return;
+    const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
+    try {
+        // ആദ്യം നിലവിലുള്ള പബ്ലിഷ് സെറ്റിങ്സ് നോക്കുന്നു
+        const publishSnap = await getDoc(doc(db, "publish_settings", docId));
+        let isPublished = false;
+        let publishDateTime = "";
+        if (publishSnap.exists()) {
+            isPublished = publishSnap.data().isPublished || false;
+            publishDateTime = publishSnap.data().publishDateTime || "";
+        }
+
+        const marksQuery = query(collection(db, "marks"), 
+            where("madrasaUid", "==", madrasaUid), 
+            where("className", "==", assignedClass), 
+            where("term", "==", term));
+        
+        const marksSnap = await getDocs(marksQuery);
+        let marksMap = {};
+        marksSnap.forEach(doc => { marksMap[doc.data().studentId] = doc.data(); });
+
+        let allStudents = Object.values(studentsMap);
+        allStudents.sort((a, b) => {
+            if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
+            return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
+        });
+        
+        let classResults = [];
+        let boyRoll = 1, girlRoll = 1;
+
+        allStudents.forEach(st => {
+            let mData = marksMap[st.id];
+            let gen = st.gender || "Male";
+            let roll = gen === "Male" ? boyRoll++ : girlRoll++;
+
+            if (mData) {
+                classResults.push({
+                    rollNo: roll,
+                    studentId: st.id,
+                    studentName: st.name,
+                    admissionNo: st.admissionNo,
+                    gender: gen,
+                    className: assignedClass,
+                    marks: mData.marks,
+                    attendance: mData.attendance,
+                    totalMarks: mData.totalMarks,
+                    maxMarkTotal: mData.maxMarkTotal,
+                    percentage: mData.percentage,
+                    grade: mData.grade,
+                    status: mData.status,
+                    rank: mData.rank || "",
+                    subjectConfig: mData.subjectConfig
+                });
+            }
+        });
+        
+        await setDoc(doc(db, "result_cache", docId), {
+            madrasaUid,
+            className: assignedClass,
+            term,
+            isPublished,
+            publishDateTime,
+            lastUpdated: new Date().toISOString(),
+            resultsData: JSON.stringify(classResults)
+        });
+    } catch (e) {
+        console.error("Auto-Cache Sync Error:", e);
+    }
+}
+
 async function loadTeacherData() {
     try {
         const teacherDoc = await getDoc(doc(db, "users", teacherUid));
@@ -422,6 +494,7 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
     }
 });
 
+// 📌 മാറ്റം: മാനുവൽ ആയി മാർക്ക് സേവ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     const select = document.getElementById("markStudentSelect"); const studentId = select.value;
     if (!studentId) return alert("Select a student");
@@ -475,7 +548,12 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
             subjectConfig: classSubjects,
             percentage, grade: finalGrade, status: finalStatus
         });
-        alert("Marks saved!"); select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
+        
+        // ➡️ ഇവിടെ തനിയെ കാഷ് അപ്ഡേറ്റ് ആകുന്നു
+        await syncResultCache(term);
+        
+        alert("Marks saved successfully!"); 
+        select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
         if(forcePromoteCheck) forcePromoteCheck.checked = false;
         loadResults();
     } catch (e) {}
@@ -532,6 +610,7 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
     reader.readAsArrayBuffer(file);
 });
 
+// 📌 മാറ്റം: എക്സൽ വഴി മാർക്ക് അപ്‌ലോഡ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     const file = document.getElementById("marksExcel").files[0];
     const term = document.getElementById("examTerm").value;
@@ -594,7 +673,11 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 });
                 count++;
             }
-            alert(`Uploaded ${count} student marks.`);
+            
+            // ➡️ ഇവിടെ തനിയെ കാഷ് അപ്ഡേറ്റ് ആകുന്നു
+            await syncResultCache(term);
+            
+            alert(`Uploaded ${count} student marks and synced cache.`);
             document.getElementById("marksExcel").value = "";
             loadResults();
         } catch (err) { alert("Error parsing excel."); }
@@ -603,6 +686,7 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     reader.readAsArrayBuffer(file);
 });
 
+// 📌 മാറ്റം: മുഴുവൻ മാർക്കും ഡിലീറ്റ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async () => {
     const term = document.getElementById("viewResultTerm").value;
     if(!confirm(`Are you absolutely sure you want to DELETE ALL marks for ${term} in Class ${assignedClass}?`)) return;
@@ -612,6 +696,9 @@ document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async
         const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
         const deletePromises = snap.docs.map(mDoc => deleteDoc(doc(db, "marks", mDoc.id)));
         await Promise.all(deletePromises);
+        
+        // ➡️ കാഷ് അപ്ഡേറ്റ് ചെയ്യുന്നു
+        await syncResultCache(term);
         
         alert(`All marks for ${term} deleted successfully.`);
         loadResults();
@@ -780,9 +867,11 @@ async function loadResults() {
     }
 }
 
+// 📌 മാറ്റം: സിംഗിൾ മാർക്ക് ഡിലീറ്റ് ചെയ്യുമ്പോഴും ബാക്ക്ഗ്രൗണ്ടിൽ സിങ്ക് ചെയ്യും
 window.deleteMark = async (docId, term) => {
     if(!confirm("Delete this result?")) return;
     await deleteDoc(doc(db, "marks", docId));
+    await syncResultCache(term);
     loadResults();
 };
 
@@ -822,7 +911,7 @@ async function loadPublishSettings(term) {
     }
 }
 
-// 📌 മാറ്റം: ക്ലാസിലെ എല്ലാ കുട്ടികൾക്കും (മാർക്ക് ഇല്ലെങ്കിലും) കൃത്യമായി റോൾ നമ്പർ നൽകി സേവ് ചെയ്യുന്നു
+// 📌 മാറ്റം: മാനുവൽ ആയി ലോക്ക് ചെയ്യുമ്പോഴും പുതിയ ഫംഗ്ഷൻ ഉപയോഗിച്ച് സിങ്ക് ചെയ്യും
 document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
     const term = document.getElementById("publishTerm").value;
     const isPublished = document.getElementById("publishStatus").value === "published";
@@ -842,66 +931,10 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
             publishDateTime
         });
         
-        if (isPublished) {
-            const marksQuery = query(collection(db, "marks"), 
-                where("madrasaUid", "==", madrasaUid), 
-                where("className", "==", assignedClass), 
-                where("term", "==", term));
-            
-            const marksSnap = await getDocs(marksQuery);
-            let marksMap = {};
-            marksSnap.forEach(doc => {
-                marksMap[doc.data().studentId] = doc.data();
-            });
-
-            // ക്ലാസ്സിലെ മുഴുവൻ കുട്ടികളെയും എടുത്ത് ഡാഷ്‌ബോർഡിലെ അതേ ഓർഡറിൽ സെറ്റ് ചെയ്യുന്നു
-            let allStudents = Object.values(studentsMap);
-            allStudents.sort((a, b) => {
-                if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
-                return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
-            });
-            
-            let classResults = [];
-            let boyRoll = 1, girlRoll = 1;
-
-            allStudents.forEach(st => {
-                let mData = marksMap[st.id];
-                let gen = st.gender || "Male";
-                let roll = gen === "Male" ? boyRoll++ : girlRoll++; // കൃത്യമായ റോൾ നമ്പർ
-
-                if (mData) {
-                    classResults.push({
-                        rollNo: roll, // റോൾ നമ്പർ ഇതിൽ സേവ് ചെയ്യുന്നു
-                        studentId: st.id,
-                        studentName: st.name,
-                        admissionNo: st.admissionNo,
-                        gender: gen,
-                        className: assignedClass, // ക്ലാസ്സും സേവ് ചെയ്യുന്നു
-                        marks: mData.marks,
-                        attendance: mData.attendance,
-                        totalMarks: mData.totalMarks,
-                        maxMarkTotal: mData.maxMarkTotal,
-                        percentage: mData.percentage,
-                        grade: mData.grade,
-                        status: mData.status,
-                        rank: mData.rank || "",
-                        subjectConfig: mData.subjectConfig
-                    });
-                }
-            });
-            
-            await setDoc(doc(db, "result_cache", docId), {
-                madrasaUid,
-                className: assignedClass,
-                term,
-                isPublished,
-                publishDateTime,
-                lastUpdated: new Date().toISOString(),
-                resultsData: JSON.stringify(classResults)
-            });
-        }
+        // പുതിയ ഫംഗ്ഷൻ വെച്ച് ഫയൽ സിങ്ക് ചെയ്യുന്നു
+        await syncResultCache(term);
         
-        alert(`Settings & Cache for ${term} synced successfully!\nStudents can now check results instantly.`);
+        alert(`Settings & Cache for ${term} synced successfully!`);
         loadPublishSettings(term);
     } catch(e) {
         console.error(e);
@@ -1012,7 +1045,6 @@ document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () =>
 
 document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
     const resultUrl = `${window.location.origin}/result.html?mid=${customMadrasaId || madrasaUid}`;
-    
     navigator.clipboard.writeText(resultUrl).then(() => {
         alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.\n\nLink: " + resultUrl);
     }).catch(err => {
