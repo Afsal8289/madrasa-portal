@@ -70,12 +70,10 @@ function formatDate(dateStr) {
     return dateStr;
 }
 
-// 📌 പുതിയ മാറ്റം: ബാക്ക്ഗ്രൗണ്ടിൽ തനിയെ കാഷ് അപ്ഡേറ്റ് ചെയ്യാനുള്ള സെൻട്രലൈസ്ഡ് ഫംഗ്ഷൻ
 async function syncResultCache(term) {
     if (!madrasaUid || !assignedClass || !term) return;
     const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
     try {
-        // ആദ്യം നിലവിലുള്ള പബ്ലിഷ് സെറ്റിങ്സ് നോക്കുന്നു
         const publishSnap = await getDoc(doc(db, "publish_settings", docId));
         let isPublished = false;
         let publishDateTime = "";
@@ -371,8 +369,9 @@ async function loadStudents() {
         const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
         const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
         
+        // 📌 മാറ്റം: ഉയരം (min-height) 165px ആക്കി കൂട്ടി ഭംഗിയാക്കി
         currentChunk += `
-            <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 145px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
+            <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 165px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
                 <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
                 <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Name: ${st.name.toUpperCase()}</p>
                 <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Class: ${assignedClass.toUpperCase()}</p>
@@ -380,7 +379,8 @@ async function loadStudents() {
         `;
         labelCount++;
 
-        if (labelCount % 18 === 0) {
+        // 📌 മാറ്റം: 18 എന്നത് മാറ്റി 15 ആക്കി (ഒരു പേജിൽ 15 എണ്ണം മാത്രം)
+        if (labelCount % 15 === 0) {
             deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
             currentChunk = "";
         }
@@ -494,7 +494,6 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
     }
 });
 
-// 📌 മാറ്റം: മാനുവൽ ആയി മാർക്ക് സേവ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     const select = document.getElementById("markStudentSelect"); const studentId = select.value;
     if (!studentId) return alert("Select a student");
@@ -549,7 +548,6 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
             percentage, grade: finalGrade, status: finalStatus
         });
         
-        // ➡️ ഇവിടെ തനിയെ കാഷ് അപ്ഡേറ്റ് ആകുന്നു
         await syncResultCache(term);
         
         alert("Marks saved successfully!"); 
@@ -610,7 +608,6 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
     reader.readAsArrayBuffer(file);
 });
 
-// 📌 മാറ്റം: എക്സൽ വഴി മാർക്ക് അപ്‌ലോഡ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     const file = document.getElementById("marksExcel").files[0];
     const term = document.getElementById("examTerm").value;
@@ -674,7 +671,6 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 count++;
             }
             
-            // ➡️ ഇവിടെ തനിയെ കാഷ് അപ്ഡേറ്റ് ആകുന്നു
             await syncResultCache(term);
             
             alert(`Uploaded ${count} student marks and synced cache.`);
@@ -686,7 +682,6 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
     reader.readAsArrayBuffer(file);
 });
 
-// 📌 മാറ്റം: മുഴുവൻ മാർക്കും ഡിലീറ്റ് ചെയ്യുമ്പോൾ തനിയെ കാഷ് സിങ്ക് ചെയ്യും
 document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async () => {
     const term = document.getElementById("viewResultTerm").value;
     if(!confirm(`Are you absolutely sure you want to DELETE ALL marks for ${term} in Class ${assignedClass}?`)) return;
@@ -697,7 +692,6 @@ document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async
         const deletePromises = snap.docs.map(mDoc => deleteDoc(doc(db, "marks", mDoc.id)));
         await Promise.all(deletePromises);
         
-        // ➡️ കാഷ് അപ്ഡേറ്റ് ചെയ്യുന്നു
         await syncResultCache(term);
         
         alert(`All marks for ${term} deleted successfully.`);
@@ -867,7 +861,6 @@ async function loadResults() {
     }
 }
 
-// 📌 മാറ്റം: സിംഗിൾ മാർക്ക് ഡിലീറ്റ് ചെയ്യുമ്പോഴും ബാക്ക്ഗ്രൗണ്ടിൽ സിങ്ക് ചെയ്യും
 window.deleteMark = async (docId, term) => {
     if(!confirm("Delete this result?")) return;
     await deleteDoc(doc(db, "marks", docId));
@@ -911,7 +904,6 @@ async function loadPublishSettings(term) {
     }
 }
 
-// 📌 മാറ്റം: മാനുവൽ ആയി ലോക്ക് ചെയ്യുമ്പോഴും പുതിയ ഫംഗ്ഷൻ ഉപയോഗിച്ച് സിങ്ക് ചെയ്യും
 document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
     const term = document.getElementById("publishTerm").value;
     const isPublished = document.getElementById("publishStatus").value === "published";
@@ -931,7 +923,6 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
             publishDateTime
         });
         
-        // പുതിയ ഫംഗ്ഷൻ വെച്ച് ഫയൽ സിങ്ക് ചെയ്യുന്നു
         await syncResultCache(term);
         
         alert(`Settings & Cache for ${term} synced successfully!`);
