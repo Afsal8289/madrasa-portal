@@ -21,8 +21,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// അഡ്മിൻ ലോഗൗട്ട് ആയി പോകാതിരിക്കാൻ ഉസ്താദിനെ ആഡ് ചെയ്യാനുള്ള രണ്ടാമത്തെ ആപ്പ് കണക്ഷൻ
+const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+const secondaryAuth = getAuth(secondaryApp);
+
 let adminUid = "";
-let madrasaIdCode = ""; // ലിങ്കിൽ കാണിക്കാനുള്ള മദ്രസ ഐഡി
+let madrasaIdCode = ""; 
 
 // Global variables
 window.currentTcStudent = null;
@@ -51,9 +55,8 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- Copy Links Logic (Modified to use Custom Madrasa ID) ---
 document.getElementById('copyAdmissionLinkBtn').addEventListener('click', () => {
-    const targetId = madrasaIdCode || adminUid; // മദ്രസ ഐഡി ഉണ്ടെങ്കിൽ അത് എടുക്കും, ഇല്ലെങ്കിൽ മാത്രം പഴയ ഐഡി
+    const targetId = madrasaIdCode || adminUid; 
     const admissionUrl = `${window.location.origin}/admission.html?mid=${targetId}`;
     navigator.clipboard.writeText(admissionUrl).then(() => {
         alert("Admission Link Copied!\n\nLink: " + admissionUrl + "\n\nShare this link via WhatsApp.");
@@ -61,14 +64,13 @@ document.getElementById('copyAdmissionLinkBtn').addEventListener('click', () => 
 });
 
 document.getElementById('copyResultLinkBtn').addEventListener('click', () => {
-    const targetId = madrasaIdCode || adminUid; // മദ്രസ ഐഡി ഉണ്ടെങ്കിൽ അത് എടുക്കും, ഇല്ലെങ്കിൽ മാത്രം പഴയ ഐഡി
+    const targetId = madrasaIdCode || adminUid; 
     const resultUrl = `${window.location.origin}/result.html?mid=${targetId}`;
     navigator.clipboard.writeText(resultUrl).then(() => {
         alert("Result Link Copied!\n\nLink: " + resultUrl + "\n\nShare this link so students can view their results.");
     });
 });
 
-// --- 1. Load Madrasa Data ---
 async function loadMadrasaData() {
     const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses'));
     const cachedName = localStorage.getItem('madrasaName');
@@ -82,9 +84,13 @@ async function loadMadrasaData() {
         
         if(docSnap.exists()) {
             const data = docSnap.data();
-            madrasaIdCode = data.madrasaId; // ഡാറ്റാബേസിൽ നിന്ന് മദ്രസ ഐഡി എടുക്കുന്നു
-            document.getElementById('madrasaNameDisplay').innerText = data.madrasaName;
-            localStorage.setItem('madrasaName', data.madrasaName); 
+            madrasaIdCode = data.madrasaId || adminUid; 
+            
+            // undefined എറർ പരിഹരിച്ചു
+            const mName = data.madrasaName || data.name || "Madrasa Admin";
+            
+            document.getElementById('madrasaNameDisplay').innerText = mName;
+            localStorage.setItem('madrasaName', mName); 
 
             const classes = data.classes || []; 
             localStorage.setItem('madrasaClasses', JSON.stringify(classes)); 
@@ -155,7 +161,6 @@ document.getElementById('addClassBtn').addEventListener('click', async () => {
 });
 
 
-// --- 2. ADMIN RESULT PUBLISH LOGIC ---
 document.getElementById('adminPublishTerm').addEventListener('change', loadAdminPublishStatus);
 document.getElementById('adminPublishClass').addEventListener('change', loadAdminPublishStatus);
 
@@ -244,7 +249,6 @@ document.getElementById('adminSavePublishBtn').addEventListener('click', async (
 });
 
 
-// --- 3. PENDING ADMISSIONS SECTION ---
 async function loadPendingAdmissions() {
     const tbody = document.getElementById('pendingAdmissionsBody');
     try {
@@ -303,7 +307,6 @@ window.rejectAdmission = async (docId) => {
 };
 
 
-// --- 4. TEACHER MANAGEMENT ---
 document.getElementById('createTeacherBtn').addEventListener('click', async () => {
     const name = document.getElementById('tName').value.trim();
     const mobile = document.getElementById('tMobile').value.trim();
@@ -314,13 +317,15 @@ document.getElementById('createTeacherBtn').addEventListener('click', async () =
 
     document.getElementById('createTeacherBtn').innerText = "Adding...";
     
-    // ഡമ്മി ഇമെയിൽ സിസ്റ്റം മാറ്റി മദ്രസ ഐഡി കൂടി ചേർത്തുള്ള പുതിയ ലോഗിൻ സിസ്റ്റം
-    const currentVersion = "v8"; // പുതിയ വെർഷൻ
+    const currentVersion = "v8"; 
     const targetId = madrasaIdCode || adminUid; 
     const dummyEmail = `${mobile}@${currentVersion}.${targetId}.com`.toLowerCase();
 
     try {
-        const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, password);
+        // അഡ്മിൻ ലോഗൗട്ട് ആകാതിരിക്കാനുള്ള പുതിയ സുരക്ഷാ രീതി
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, dummyEmail, password);
+        await signOut(secondaryAuth); // ക്രിയേറ്റ് ചെയ്ത ഉടനെ അതിൽ നിന്ന് ലോഗൗട്ട് ചെയ്യുന്നു
+
         await setDoc(doc(db, "users", userCredential.user.uid), {
             name: name,
             mobile: mobile,
@@ -346,25 +351,30 @@ document.getElementById('createTeacherBtn').addEventListener('click', async () =
     document.getElementById('createTeacherBtn').innerText = "Add Teacher";
 });
 
+// ഉസ്താദുമാരുടെ ലിസ്റ്റ് വരാത്ത പ്രശ്നം പരിഹരിച്ച ഭാഗം
 async function loadTeachers() {
     const tbody = document.getElementById('teacherTableBody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>';
     try {
-        const q = query(collection(db, "users"), where("role", "==", "teacher"), where("madrasaUid", "==", adminUid));
+        // ഇൻഡക്സ് എറർ ഒഴിവാക്കാൻ ക്വറി ലളിതമാക്കി
+        const q = query(collection(db, "users"), where("madrasaUid", "==", adminUid));
         const querySnapshot = await getDocs(q);
         
         tbody.innerHTML = '';
         teachersDataList = {}; 
-
-        if(querySnapshot.empty) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
-
         let teachersArray = [];
+
         querySnapshot.forEach((documentSnapshot) => {
             const data = documentSnapshot.data();
-            data.id = documentSnapshot.id; 
-            teachersArray.push(data);
-            teachersDataList[data.id] = data; 
+            // ഇവിടെ വെച്ച് അധ്യാപകരെ മാത്രം ഫിൽറ്റർ ചെയ്യുന്നു
+            if(data.role === "teacher") {
+                data.id = documentSnapshot.id; 
+                teachersArray.push(data);
+                teachersDataList[data.id] = data; 
+            }
         });
+
+        if(teachersArray.length === 0) return tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No Teachers added yet.</td></tr>';
 
         teachersArray.sort((a, b) => {
             const classA = a.assignedClass || "";
@@ -443,7 +453,7 @@ document.getElementById('saveTeacherEditBtn').addEventListener('click', async ()
     document.getElementById('saveTeacherEditBtn').innerText = "Save Changes";
 });
 
-// --- 5. TC (TRANSFER CERTIFICATE) SECTION ---
+
 document.getElementById('searchTcBtn').addEventListener('click', async () => {
     const adNo = document.getElementById('tcAdnoSearch').value.trim();
     if(!adNo) return alert("Enter Admission Number");
