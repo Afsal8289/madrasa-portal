@@ -27,6 +27,7 @@ let customMadrasaId = "";
 let classSubjects = [];
 let studentsMap = {};
 let editModalInstance = null;
+let classMuallimName = ""; 
 
 const displayMadrasaName = document.getElementById("displayMadrasaName");
 const displayClassName = document.getElementById("displayClassName");
@@ -145,11 +146,51 @@ async function loadTeacherData() {
         const teacherDoc = await getDoc(doc(db, "users", teacherUid));
         if (teacherDoc.exists()) {
             const tData = teacherDoc.data();
-            assignedClass = String(tData.assignedClass);
+            
+            const loggedInClass = localStorage.getItem('teacherCurrentClass');
+            assignedClass = loggedInClass;
+            
+            if(!assignedClass) {
+                assignedClass = Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass);
+            }
+
             madrasaUid = tData.madrasaUid;
             teacherNameGlobal = tData.name;
             
-            let rawSubjects = tData.subjects || [];
+            let rawSubjects = [];
+            const subDoc = await getDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`));
+            
+            if(subDoc.exists()) {
+                rawSubjects = subDoc.data().subjects || [];
+                classMuallimName = subDoc.data().muallimName || ""; 
+            } else {
+                rawSubjects = tData.subjects || [];
+            }
+
+            if (rawSubjects.length === 0) {
+                try {
+                    const marksQ = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
+                    const marksSnap = await getDocs(marksQ);
+                    
+                    if (!marksSnap.empty) {
+                        for (let mDoc of marksSnap.docs) {
+                            if (mDoc.data().subjectConfig && mDoc.data().subjectConfig.length > 0) {
+                                rawSubjects = mDoc.data().subjectConfig;
+                                break; 
+                            }
+                        }
+                        
+                        if (rawSubjects.length > 0) {
+                            await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
+                                subjects: rawSubjects,
+                                madrasaUid: madrasaUid,
+                                className: assignedClass
+                            }, { merge: true });
+                        }
+                    }
+                } catch(e) { console.error("Subject recovery error:", e); }
+            }
+            
             classSubjects = rawSubjects.map(sub => {
                 if(typeof sub === 'string') return { name: sub, maxMark: 100, passMark: 35 }; 
                 return sub;
@@ -163,6 +204,22 @@ async function loadTeacherData() {
                 customMadrasaId = adminDoc.data().madrasaId || madrasaUid;
                 displayMadrasaName.textContent = madrasaNameGlobal;
             }
+
+            const savedExamTerm = localStorage.getItem('savedExamTerm');
+            if (savedExamTerm && document.getElementById("examTerm")) {
+                document.getElementById("examTerm").value = savedExamTerm;
+            }
+            
+            const savedViewTerm = localStorage.getItem('savedViewTerm');
+            if (savedViewTerm && document.getElementById("viewResultTerm")) {
+                document.getElementById("viewResultTerm").value = savedViewTerm;
+            }
+            
+            const savedPublishTerm = localStorage.getItem('savedPublishTerm');
+            if (savedPublishTerm && document.getElementById("publishTerm")) {
+                document.getElementById("publishTerm").value = savedPublishTerm;
+            }
+
             renderSubjectsUI();
             await loadStudents();
             loadResults();
@@ -183,6 +240,31 @@ function setupTabs() {
     });
 }
 
+if (document.getElementById("examTerm")) {
+    document.getElementById("examTerm").addEventListener("change", (e) => {
+        localStorage.setItem('savedExamTerm', e.target.value);
+        document.getElementById("markStudentSelect").value = "";
+        document.getElementById("attendanceInput").value = "";
+        document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
+        if(document.getElementById("forcePromoteCheck")) document.getElementById("forcePromoteCheck").checked = false;
+        document.getElementById("saveMarksBtn").textContent = "Save Marks";
+    });
+}
+
+if (document.getElementById("viewResultTerm")) {
+    document.getElementById("viewResultTerm").addEventListener("change", (e) => {
+        localStorage.setItem('savedViewTerm', e.target.value);
+        loadResults();
+    });
+}
+
+if (document.getElementById("publishTerm")) {
+    document.getElementById("publishTerm").addEventListener("change", (e) => {
+        localStorage.setItem('savedPublishTerm', e.target.value);
+        loadPublishSettings(e.target.value);
+    });
+}
+
 document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     const newSub = document.getElementById("newSubjectName").value.trim();
     const maxMark = Number(document.getElementById("newSubjectMaxMark").value) || 100;
@@ -194,13 +276,20 @@ document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     classSubjects.push({ name: newSub, maxMark, passMark });
     
     try { 
-        await updateDoc(doc(db, "users", teacherUid), { subjects: classSubjects }); 
+        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
+            subjects: classSubjects,
+            madrasaUid: madrasaUid,
+            className: assignedClass
+        }, { merge: true }); 
+        
         document.getElementById("newSubjectName").value = ""; 
         document.getElementById("newSubjectMaxMark").value = ""; 
         document.getElementById("newSubjectPassMark").value = ""; 
         renderSubjectsUI(); 
         loadResults(); 
-    } catch (e) {}
+    } catch (e) {
+        alert("Error saving subject.");
+    }
 });
 
 window.deleteSubject = async (subName) => {
@@ -209,7 +298,11 @@ window.deleteSubject = async (subName) => {
     classSubjects = classSubjects.filter(s => s.name !== subName);
     
     try { 
-        await updateDoc(doc(db, "users", teacherUid), { subjects: classSubjects }); 
+        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
+            subjects: classSubjects,
+            madrasaUid: madrasaUid,
+            className: assignedClass
+        }, { merge: true });
         
         const marksQuery = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
         const marksSnap = await getDocs(marksQuery);
@@ -302,6 +395,12 @@ document.getElementById("addStudentBtn").addEventListener("click", async () => {
 
     if (!name || !admissionNo) return alert("Name and Admission No are required.");
     
+    // 📌 അഡ്മിഷൻ നമ്പർ നിലവിലുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+    const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo));
+    if (exists) {
+        return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
+    }
+    
     document.getElementById("addStudentBtn").textContent = "Saving...";
     try {
         await addDoc(collection(db, "students"), { name, admissionNo, gender, dob, fatherName, place, contactNo, whatsappNo, className: assignedClass, madrasaUid });
@@ -350,13 +449,15 @@ async function loadStudents() {
     let labelCount = 0;
 
     students.forEach(st => {
-        studentsMap[st.admissionNo] = st;
+        // 📌 സിസ്റ്റം മാപ്പ് ചെയ്യുന്നത് ഒറിജിനൽ ഐഡി ഉപയോഗിച്ച്
+        studentsMap[st.id] = st;
         const displayDob = formatDate(st.dob);
         
+        // 📌 എഡിറ്റ് ബട്ടണിലേക്ക് ഒറിജിനൽ ഐഡി നൽകുന്നു
         tbody.innerHTML += `<tr>
             <td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
             <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td>
-            <td><button class="btn-custom btn-warning-custom btn-small btn-auto" onclick="openEditModal('${st.admissionNo}')">Edit</button> <button class="btn-custom btn-danger-custom btn-small btn-auto" onclick="deleteStudent('${st.id}')">Del</button></td></tr>`;
+            <td><button class="btn-custom btn-warning-custom btn-small btn-auto" onclick="openEditModal('${st.id}')">Edit</button> <button class="btn-custom btn-danger-custom btn-small btn-auto" onclick="deleteStudent('${st.id}')">Del</button></td></tr>`;
             
         upgradeBody.innerHTML += `<tr><td><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td><td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td></tr>`;
 
@@ -369,7 +470,6 @@ async function loadStudents() {
         const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
         const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
         
-        // 📌 മാറ്റം: ഉയരം (min-height) 165px ആക്കി കൂട്ടി ഭംഗിയാക്കി
         currentChunk += `
             <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 165px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
                 <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
@@ -379,7 +479,6 @@ async function loadStudents() {
         `;
         labelCount++;
 
-        // 📌 മാറ്റം: 18 എന്നത് മാറ്റി 15 ആക്കി (ഒരു പേജിൽ 15 എണ്ണം മാത്രം)
         if (labelCount % 15 === 0) {
             deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
             currentChunk = "";
@@ -396,8 +495,9 @@ async function loadStudents() {
     }
 }
 
-window.openEditModal = (adNo) => {
-    const st = studentsMap[adNo];
+// 📌 എഡിറ്റ് മോഡൽ തുറക്കുമ്പോൾ ഒറിജിനൽ ഐഡി സ്വീകരിക്കുന്നു
+window.openEditModal = (studentId) => {
+    const st = studentsMap[studentId];
     if(!st) return;
     document.getElementById("editStudentId").value = st.id;
     document.getElementById("editName").value = st.name || "";
@@ -416,6 +516,12 @@ document.getElementById("saveEditStudentBtn").addEventListener("click", async ()
     const name = document.getElementById("editName").value.trim();
     const admissionNo = document.getElementById("editAdNo").value.trim();
     if(!name || !admissionNo) return alert("Name & Ad No required");
+    
+    // 📌 എഡിറ്റ് ചെയ്യുമ്പോഴും അഡ്മിഷൻ നമ്പർ ഡ്യൂപ്ലിക്കേറ്റ് വരുന്നുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+    const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo) && s.id !== id);
+    if(exists) {
+        return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
+    }
     
     document.getElementById("saveEditStudentBtn").textContent = "Saving...";
     try {
@@ -570,6 +676,7 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
             const workbook = XLSX.read(data, { type: "array" });
             const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
             let count = 0;
+            let skippedCount = 0;
             
             for (const row of json) {
                 const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
@@ -577,6 +684,14 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
                 const genderKey = Object.keys(row).find(k => k.toLowerCase() === 'gender');
                 
                 if (!nameKey || !admKey) continue;
+                
+                // 📌 എക്സൽ വഴി അപ്‌ലോഡ് ചെയ്യുമ്പോഴും അഡ്മിഷൻ നമ്പർ പരിശോധിക്കുന്നു
+                const newAdmNo = String(row[admKey]).trim();
+                const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === newAdmNo);
+                if (exists) {
+                    skippedCount++;
+                    continue; // നിലവിലുള്ള നമ്പറുകൾ ഒഴിവാക്കുന്നു
+                }
                 
                 const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob');
                 const fatherKey = Object.keys(row).find(k => k.toLowerCase() === 'fathername');
@@ -586,7 +701,7 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
 
                 await addDoc(collection(db, "students"), {
                     name: String(row[nameKey]).trim(),
-                    admissionNo: String(row[admKey]).trim(),
+                    admissionNo: newAdmNo,
                     gender: genderKey ? String(row[genderKey]).trim() : "Male",
                     dob: dobKey ? String(row[dobKey]).trim() : "",
                     fatherName: fatherKey ? String(row[fatherKey]).trim() : "",
@@ -599,7 +714,11 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
                 count++;
             }
             clearCache(`cache_students_${assignedClass}`);
-            alert(`Uploaded ${count} students successfully.`);
+            
+            let alertMsg = `Uploaded ${count} students successfully.`;
+            if (skippedCount > 0) alertMsg += `\n\n(Skipped ${skippedCount} students because their Admission Number already exists in this class).`;
+            alert(alertMsg);
+            
             document.getElementById("studentExcel").value = "";
             await loadStudents();
         } catch (err) { alert("Error parsing excel."); }
@@ -629,7 +748,9 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 const attKey = Object.keys(row).find(k => k.toLowerCase() === 'attendance');
                 if (!admKey) continue;
                 
-                const student = studentsMap[String(row[admKey]).trim()];
+                // 📌 എക്സലിൽ നിന്ന് മാർക്ക് എടുക്കാൻ അഡ്മിഷൻ നമ്പർ വെച്ച് കുട്ടിയെ കണ്ടുപിടിക്കുന്നു
+                const excelAdm = String(row[admKey]).trim();
+                const student = Object.values(studentsMap).find(s => String(s.admissionNo) === excelAdm);
                 if (!student) continue;
                 
                 let marksData = {}, totalObtained = 0, isPassed = true, isValid = true;
@@ -700,8 +821,6 @@ document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async
     document.getElementById("deleteAllMarksTermBtn").textContent = "Delete ALL Marks for this Term";
 });
 
-document.getElementById("viewResultTerm").addEventListener("change", loadResults);
-
 async function loadResults() {
     const term = document.getElementById("viewResultTerm").value;
     if (!assignedClass || !madrasaUid) return;
@@ -728,7 +847,8 @@ async function loadResults() {
     ['pdfMadrasaName1', 'pdfMadrasaName2'].forEach(id => document.getElementById(id).textContent = madrasaNameGlobal);
     document.getElementById("pdfExamTitle1").textContent = titleText;
     document.getElementById("pdfExamTitle2").textContent = titleText;
-    document.getElementById("pdfTeacherName1").textContent = teacherNameGlobal;
+    
+    document.getElementById("pdfTeacherName1").textContent = classMuallimName ? classMuallimName.toUpperCase() : teacherNameGlobal;
     
     const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
     
@@ -776,13 +896,16 @@ async function loadResults() {
         }
     });
     
+    // 📌 റിസൾട്ട് ഓർഡർ ചെയ്യുന്നത് മാറ്റിയെഴുതിയിരിക്കുന്നു
     results.sort((a, b) => {
-        const adA = Object.keys(studentsMap).find(k => studentsMap[k].id === a.studentId) || "";
-        const adB = Object.keys(studentsMap).find(k => studentsMap[k].id === b.studentId) || "";
-        const gA = studentsMap[adA]?.gender || "Male";
-        const gB = studentsMap[adB]?.gender || "Male";
+        const stA = studentsMap[a.studentId];
+        const stB = studentsMap[b.studentId];
+        const gA = stA ? stA.gender : "Male";
+        const gB = stB ? stB.gender : "Male";
         if (gA !== gB) return gA === "Male" ? -1 : 1;
-        return String(adA).localeCompare(String(adB), undefined, {numeric: true});
+        const adA = stA ? String(stA.admissionNo) : "";
+        const adB = stB ? String(stB.admissionNo) : "";
+        return adA.localeCompare(adB, undefined, {numeric: true});
     });
     
     let sBody = "", pBody1 = "", pBody2 = "";
@@ -790,8 +913,10 @@ async function loadResults() {
     let boyRoll = 1, girlRoll = 1;
     
     results.forEach(res => {
-        const adNo = Object.keys(studentsMap).find(k => studentsMap[k].id === res.studentId) || "-";
-        const gen = studentsMap[adNo]?.gender || "Male";
+        // 📌 കുട്ടിയുടെ വിവരങ്ങൾ നേരിട്ട് എടുക്കുന്നു
+        const st = studentsMap[res.studentId];
+        const adNo = st ? st.admissionNo : "-";
+        const gen = st ? st.gender : "Male";
         
         if (gen === "Male") { bTot++; if (res.status !== "Failed" && !res.isPlaceholder) bPass++; }
         else { gTot++; if (res.status !== "Failed" && !res.isPlaceholder) gPass++; }
@@ -867,10 +992,6 @@ window.deleteMark = async (docId, term) => {
     await syncResultCache(term);
     loadResults();
 };
-
-document.getElementById("publishTerm").addEventListener("change", async (e) => {
-    loadPublishSettings(e.target.value);
-});
 
 async function loadPublishSettings(term) {
     if(!madrasaUid || !assignedClass || !term) return;
@@ -1019,9 +1140,23 @@ document.getElementById("downloadStudentListBtn").addEventListener("click", () =
     generatePDF("pdfStudentListArea", `Class_${assignedClass}_Students_List.pdf`, 'p');
 });
 
-document.getElementById("downloadDetailedPdfBtn").addEventListener("click", () => {
-    const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-    generatePDF("pdfExportArea", `Class_${assignedClass}_${term}_Marklist.pdf`, 'p');
+document.getElementById("downloadDetailedPdfBtn").addEventListener("click", async () => {
+    let currentName = classMuallimName || teacherNameGlobal;
+    let ustadName = prompt("ഈ ക്ലാസ്സിലെ മാർക്ക് ലിസ്റ്റിൽ താഴെ കാണിക്കേണ്ട ഉസ്താദിന്റെ പേര് നൽകുക:", currentName);
+    
+    if (ustadName !== null) {
+        let finalName = ustadName.trim() === "" ? teacherNameGlobal : ustadName.trim().toUpperCase();
+        
+        document.getElementById("pdfTeacherName1").textContent = finalName;
+        classMuallimName = finalName;
+        
+        try {
+            await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { muallimName: finalName }, { merge: true });
+        } catch(e) {}
+        
+        const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
+        generatePDF("pdfExportArea", `Class_${assignedClass}_${term}_Marklist.pdf`, 'p');
+    }
 });
 
 document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => {

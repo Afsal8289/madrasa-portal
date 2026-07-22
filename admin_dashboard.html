@@ -43,7 +43,6 @@
         .publish-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; }
         @media (max-width: 576px) { .publish-grid { grid-template-columns: 1fr; } }
 
-        /* Edit Modal Styles */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
         .modal-content h3 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #f0f4f8; padding-bottom: 10px; margin-bottom: 15px;}
@@ -61,7 +60,6 @@
     </div>
 
     <div class="container">
-        
         <div class="col-left">
             <div class="card">
                 <h3>Manage Classes</h3>
@@ -74,6 +72,20 @@
                 </div>
             </div>
 
+            <!-- പുതിയ Teacher Data Collection ഫോം -->
+            <div class="card">
+                <h3>Save Teacher Details</h3>
+                <p style="font-size: 12px; color: #666; margin-top:0;">ഇവിടെ ഉസ്താദുമാരുടെ വിവരങ്ങൾ രേഖപ്പെടുത്തി വെക്കാം (ലോഗിൻ ചെയ്യാൻ ഈ ഡാറ്റ ആവശ്യമില്ല).</p>
+                <input type="text" id="tName" placeholder="Teacher Name">
+                <select id="tClassSelect" class="form-control">
+                    <option value="">Select Assigned Class</option>
+                </select>
+                <input type="number" id="tPhone" placeholder="Phone Number">
+                <input type="number" id="tWhatsapp" placeholder="WhatsApp Number">
+                
+                <button class="action-btn" id="saveTeacherBtn">Save Details</button>
+            </div>
+
             <div class="card">
                 <h3>Issue Transfer Certificate (TC)</h3>
                 <p style="font-size: 12px; color: #666; margin-top:0;">Search student to download TC and remove from register.</p>
@@ -82,20 +94,6 @@
                     <button class="action-btn" id="searchTcBtn" style="width: auto; padding: 10px 20px; background-color: #34495e;">Search</button>
                 </div>
                 <div id="tcStudentDetails"></div>
-            </div>
-
-            <div class="card">
-                <h3>Add New Teacher</h3>
-                <input type="text" id="tName" placeholder="Teacher Name">
-                <input type="number" id="tMobile" placeholder="Teacher Mobile Number (Login ID)">
-                <input type="text" id="tPassword" placeholder="Create Password">
-                
-                <label style="font-size: 13px; color: #555;">Assign Class</label>
-                <select id="tClass">
-                    <option value="">Loading Classes...</option>
-                </select>
-                
-                <button class="action-btn" id="createTeacherBtn">Add Teacher</button>
             </div>
         </div>
 
@@ -169,29 +167,34 @@
                 </div>
             </div>
 
+            <!-- Teachers Register List & PDF Download -->
             <div class="card">
-                <h3>Teachers List</h3>
+                <h3>
+                    Teachers Directory
+                    <button id="downloadTeachersPdfBtn" class="btn-small btn-blue" style="margin-left:auto;">📄 Download PDF</button>
+                </h3>
                 <div class="table-responsive">
                     <table>
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Mobile Number</th>
-                                <th>Class Assigned</th>
+                                <th>Class</th>
+                                <th>Phone No.</th>
+                                <th>WhatsApp No.</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="teacherTableBody">
-                            <tr><td colspan="4" style="text-align: center;">Loading data...</td></tr>
+                            <tr><td colspan="5" style="text-align: center;">Loading data...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
         </div>
-
     </div>
 
+    <!-- Edit Teacher Modal -->
     <div id="editTeacherModal" class="modal hidden">
         <div class="modal-content">
             <h3>Edit Teacher Details</h3>
@@ -200,13 +203,14 @@
             <label style="font-size: 12px; font-weight: bold; color: #666;">Teacher Name</label>
             <input type="text" id="editTeacherName" class="form-control">
             
-            <label style="font-size: 12px; font-weight: bold; color: #666;">Mobile Number</label>
-            <input type="text" id="editTeacherMobile" class="form-control" disabled style="background-color: #e9ecef; cursor: not-allowed; color: #666;">
-            <p style="font-size: 11px; color: #e74c3c; margin-top: -10px; margin-bottom: 10px;">*ലോഗിൻ ചെയ്യാൻ ഉപയോഗിക്കുന്നതിനാൽ മൊബൈൽ നമ്പർ ഇവിടെ മാറ്റാൻ സാധിക്കില്ല. മാറ്റണമെങ്കിൽ പുതിയതായി ആഡ് ചെയ്യുക.</p>
+            <label style="font-size: 12px; font-weight: bold; color: #666;">Assigned Class</label>
+            <select id="editTeacherClassSelect" class="form-control"></select>
             
-            <label style="font-size: 12px; font-weight: bold; color: #666;">Assign New Class</label>
-            <select id="editTeacherClass" class="form-control">
-                </select>
+            <label style="font-size: 12px; font-weight: bold; color: #666;">Phone Number</label>
+            <input type="number" id="editTeacherPhone" class="form-control">
+
+            <label style="font-size: 12px; font-weight: bold; color: #666;">WhatsApp Number</label>
+            <input type="number" id="editTeacherWhatsapp" class="form-control">
             
             <div style="display:flex; gap:10px; margin-top: 15px;">
                 <button class="action-btn" id="saveTeacherEditBtn">Save Changes</button>
@@ -215,6 +219,30 @@
         </div>
     </div>
 
+    <!-- Hidden Area for Teachers PDF -->
+    <div style="position: absolute; left: -9999px; top: 0;">
+        <div id="pdfTeachersArea" style="width: 800px; padding: 40px; background: white; font-family: Arial, sans-serif; color: black;">
+            <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;">
+                <h2 id="pdfMadrasaNameForTeachers" style="margin: 0; font-size: 24px; text-transform: uppercase;">MADRASA NAME</h2>
+                <h3 style="margin: 5px 0 0 0; font-size: 18px; color: #555;">TEACHERS DIRECTORY</h3>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                    <tr>
+                        <th style="border: 1px solid #000; padding: 10px; background: #f2f2f2;">SL NO</th>
+                        <th style="border: 1px solid #000; padding: 10px; background: #f2f2f2;">TEACHER NAME</th>
+                        <th style="border: 1px solid #000; padding: 10px; background: #f2f2f2;">CLASS</th>
+                        <th style="border: 1px solid #000; padding: 10px; background: #f2f2f2;">PHONE NO.</th>
+                        <th style="border: 1px solid #000; padding: 10px; background: #f2f2f2;">WHATSAPP NO.</th>
+                    </tr>
+                </thead>
+                <tbody id="pdfTeachersTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Hidden Area for TC PDF -->
     <div style="position: absolute; left: -9999px; top: 0;">
         <div id="tcPdfArea" style="width: 800px; padding: 50px; background: white; font-family: Arial, sans-serif; color: black; border: 4px solid #111;">
             <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px;">

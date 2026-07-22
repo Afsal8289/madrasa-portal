@@ -48,10 +48,10 @@
 
         <div id="teacherForm" class="login-form">
             <div class="input-group">
-                <input type="text" id="tMadrasaId" placeholder="Madrasa ID (e.g. 1050)" required>
+                <input type="email" id="tEmail" placeholder="Teacher Email" required>
             </div>
             <div class="input-group">
-                <input type="number" id="tMobile" placeholder="Mobile Number" required>
+                <input type="text" id="tClass" placeholder="Class / Division (e.g. 10 or 10A)" required>
             </div>
             <div class="input-group">
                 <input type="password" id="tPassword" placeholder="Password" required>
@@ -99,7 +99,7 @@
             if (inputField.type === "password") {
                 inputField.type = "text";
                 iconElement.classList.remove("fa-eye");
-                iconElement.classList.add("fa-eye-slash"); // പാസ്‌വേർഡ് കാണുമ്പോൾ ഐക്കൺ മാറും
+                iconElement.classList.add("fa-eye-slash"); 
             } else {
                 inputField.type = "password";
                 iconElement.classList.remove("fa-eye-slash");
@@ -107,7 +107,7 @@
             }
         }
 
-        // മാറ്റം 2: ലോഗിൻ ചെയ്യുമ്പോൾ പഴയ മെമ്മറികൾ ക്ലിയർ ചെയ്യാനുള്ള കോഡ്
+        // ലോഗിൻ ചെയ്യുമ്പോൾ പഴയ മെമ്മറികൾ ക്ലിയർ ചെയ്യാനുള്ള കോഡ്
         document.getElementById('loginTeacherBtn').addEventListener('click', function() {
             localStorage.clear();
             sessionStorage.clear();

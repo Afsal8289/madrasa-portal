@@ -14,35 +14,41 @@
         
         .container { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
         
-        @media (min-width: 768px) {
+        @media (min-width: 992px) {
             .top-cards { display: flex; gap: 20px; }
             .card { flex: 1; }
         }
         
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .card h3 { margin-top: 0; color: #2980b9; font-size: 18px; margin-bottom: 15px;}
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 20px;}
+        .card h3 { margin-top: 0; color: #2980b9; font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;}
         
         input { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px; font-family: 'Poppins', sans-serif;}
         input:focus { outline: none; border-color: #3498db; }
         
         button.action-btn { background-color: #27ae60; color: white; border: none; padding: 12px; width: 100%; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; transition: 0.3s;}
         button.update-btn { background-color: #f39c12; }
-        button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; background-color: #3498db; }
+        button.btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; color: white; font-weight: bold; background-color: #3498db; margin-right: 5px; margin-bottom: 5px;}
         button.btn-small:hover { background-color: #2980b9; }
+        button.btn-red { background-color: #e74c3c; }
+        button.btn-green { background-color: #27ae60; }
         
         .table-responsive { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 800px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
-        th { background-color: #f2f2f2; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 900px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; }
+        th { background-color: #f2f2f2; color: #333; }
         
-        .status-active { color: green; font-weight: bold; }
-        .status-expired { color: red; font-weight: bold; }
+        .status-active { color: #27ae60; font-weight: bold; }
+        .status-expired { color: #e74c3c; font-weight: bold; }
+        .status-pending { color: #f39c12; font-weight: bold; }
 
         /* Edit Modal Styles */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 5px 20px rgba(0,0,0,0.2); }
         .modal-content h3 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #f0f4f8; padding-bottom: 10px; margin-bottom: 15px;}
         .hidden { display: none !important; }
+        
+        .input-group-half { display: flex; gap: 10px; }
+        .input-group-half > div { flex: 1; }
     </style>
 </head>
 <body>
@@ -56,44 +62,80 @@
         
         <div class="top-cards">
             <div class="card">
-                <h3>Add New Madrasa</h3>
+                <h3>Add New Madrasa (Manual)</h3>
                 <input type="text" id="mName" placeholder="Madrasa Name">
                 
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="mId" placeholder="Madrasa ID (e.g. 1050)">
-                    <input type="text" id="mPlace" placeholder="Place (e.g. Kerala)">
+                <div class="input-group-half">
+                    <div><input type="text" id="mId" placeholder="Madrasa ID (e.g. 1050)"></div>
+                    <div><input type="text" id="mPlace" placeholder="Place (e.g. Kerala)"></div>
                 </div>
 
-                <input type="email" id="mEmail" placeholder="Admin Email (e.g. admin@hidaya.com)">
-                <input type="text" id="mPassword" placeholder="Create a password">
+                <div class="input-group-half">
+                    <div>
+                        <label style="font-size: 12px; color: #555; font-weight: bold;">Admin Login Details</label>
+                        <input type="email" id="mAdminEmail" placeholder="Admin Email">
+                        <input type="text" id="mAdminPassword" placeholder="Admin Password">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: #555; font-weight: bold;">Master Teacher Details</label>
+                        <input type="email" id="mTeacherEmail" placeholder="Teacher Email">
+                        <input type="text" id="mTeacherPassword" placeholder="Teacher Password">
+                    </div>
+                </div>
                 
-                <label style="font-size: 13px; color: #555;">Expiry Date (Optional)</label>
+                <label style="font-size: 13px; color: #555; font-weight: bold;">Expiry Date (Optional)</label>
                 <input type="date" id="mExpiryDate">
                 
-                <button class="action-btn" id="createMadrasaBtn">Create Account</button>
+                <button class="action-btn" id="createMadrasaBtn">Create Accounts (Admin & Teacher)</button>
             </div>
 
             <div class="card">
                 <h3>Global Expiry Update</h3>
                 <p style="font-size: 13px; color: #666; margin-top: 0;">എല്ലാ മദ്രസകളുടെയും കാലാവധി ഒന്നിച്ച് പുതുക്കുക.</p>
                 
-                <label style="font-size: 13px; color: #555;">New Global Expiry Date</label>
+                <label style="font-size: 13px; color: #555; font-weight: bold;">New Global Expiry Date</label>
                 <input type="date" id="globalExpiryDate">
                 
                 <button class="action-btn update-btn" id="updateGlobalBtn">Update All Madrasas</button>
             </div>
         </div>
 
-        <div class="card">
-            <h3>Registered Madrasas</h3>
+        <!-- പുതിയ സെക്ഷൻ: Pending Registrations -->
+        <div class="card" style="border-left: 5px solid #f39c12;">
+            <h3>Pending Registrations <span id="pendingCount" style="background:#e74c3c; color:white; padding:2px 8px; border-radius:12px; font-size:14px; margin-left:10px;">0</span></h3>
+            <p style="font-size: 12px; color: #666; margin-top: 0;">പുതിയതായി രജിസ്റ്റർ ചെയ്ത മദ്രസകൾ ഇവിടെ കാണാം. അപ്രൂവ് ചെയ്താൽ മാത്രമേ അവർക്ക് ലോഗിൻ ചെയ്യാൻ സാധിക്കൂ.</p>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Madrasa Name</th>
+                            <th>ID & Place</th>
+                            <th>Requested Admin Email</th>
+                            <th>Requested Teacher Email</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center;">Loading pending requests...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- നിലവിലുള്ള ആക്റ്റീവ് മദ്രസകൾ -->
+        <div class="card" style="border-left: 5px solid #27ae60;">
+            <h3>Approved / Active Madrasas</h3>
             <div class="table-responsive">
                 <table>
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Madrasa Name</th>
-                            <th>Place</th>
-                            <th>Email Address</th>
+                            <th>Madrasa Name & Place</th>
+                            <th>Admin Email & Pass</th>
+                            <th>Teacher Email & Pass</th>
                             <th>Expiry Date</th>
                             <th>Status</th>
                             <th>Action</th>
@@ -110,24 +152,53 @@
 
     </div>
 
+    <!-- എഡിറ്റ് ചെയ്യാനുള്ള വിപുലീകരിച്ച മോഡൽ -->
     <div id="editModal" class="modal hidden">
         <div class="modal-content">
-            <h3>Edit Madrasa Details</h3>
+            <h3>Edit Madrasa Data</h3>
             <input type="hidden" id="editUid">
+            <input type="hidden" id="editStatus"> <!-- Pending ആണോ Active ആണോ എന്ന് തിരിച്ചറിയാൻ -->
             
             <label style="font-size: 12px; font-weight: bold; color: #666;">Madrasa Name</label>
             <input type="text" id="editName">
             
-            <label style="font-size: 12px; font-weight: bold; color: #666;">Madrasa ID</label>
-            <input type="text" id="editId">
-            
-            <label style="font-size: 12px; font-weight: bold; color: #666;">Place</label>
-            <input type="text" id="editPlace">
+            <div class="input-group-half">
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #666;">Madrasa ID</label>
+                    <input type="text" id="editId">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #666;">Place</label>
+                    <input type="text" id="editPlace">
+                </div>
+            </div>
+
+            <div class="input-group-half">
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #2980b9;">Admin Email</label>
+                    <input type="email" id="editAdminEmail">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #2980b9;">Admin Password</label>
+                    <input type="text" id="editAdminPassword">
+                </div>
+            </div>
+
+            <div class="input-group-half">
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #27ae60;">Teacher Email</label>
+                    <input type="email" id="editTeacherEmail">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold; color: #27ae60;">Teacher Password</label>
+                    <input type="text" id="editTeacherPassword">
+                </div>
+            </div>
             
             <label style="font-size: 12px; font-weight: bold; color: #666;">Expiry Date</label>
             <input type="date" id="editExpiry">
             
-            <div style="display:flex; gap:10px; margin-top: 10px;">
+            <div style="display:flex; gap:10px; margin-top: 15px;">
                 <button class="action-btn" id="saveEditBtn">Save Changes</button>
                 <button class="action-btn" style="background:#e74c3c;" onclick="document.getElementById('editModal').classList.add('hidden')">Cancel</button>
             </div>
