@@ -28,10 +28,54 @@ let classSubjects = [];
 let studentsMap = {};
 let editModalInstance = null;
 let classMuallimName = ""; 
+let isSmartCacheValid = false; // 📌 Smart Cache Flag
 
 const displayMadrasaName = document.getElementById("displayMadrasaName");
 const displayClassName = document.getElementById("displayClassName");
 const logoutBtn = document.getElementById("logoutBtn");
+
+// 📌 പുതിയ സിങ്ക് ബട്ടൺ ചേർക്കുന്നു
+const syncBtn = document.createElement("button");
+syncBtn.innerHTML = "🔄 Sync Data";
+syncBtn.className = "btn-custom btn-small";
+syncBtn.style = "background: #27ae60; color: white; margin-right: 15px; font-weight: bold;";
+syncBtn.onclick = async () => {
+    syncBtn.textContent = "Syncing...";
+    localStorage.setItem(`smart_time_${assignedClass}`, "0"); 
+    isSmartCacheValid = false;
+    await loadTeacherData();
+    syncBtn.innerHTML = "🔄 Sync Data";
+    alert("ഡാറ്റ വിജയകരമായി സിങ്ക് ചെയ്തു!");
+};
+logoutBtn.parentNode.insertBefore(syncBtn, logoutBtn);
+
+// 📌 Smart Cache പരിശോധിക്കാനുള്ള ഫംഗ്ഷൻ
+async function verifySmartCache() {
+    if(!madrasaUid || !assignedClass) return false;
+    try {
+        const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
+        const serverTime = metaDoc.exists() ? metaDoc.data().lastUpdate : 0;
+        const localTime = localStorage.getItem(`smart_time_${assignedClass}`);
+
+        if (serverTime > 0 && String(serverTime) === String(localTime)) {
+            isSmartCacheValid = true;
+        } else {
+            isSmartCacheValid = false;
+            localStorage.setItem(`smart_time_${assignedClass}`, serverTime);
+        }
+    } catch(e) { isSmartCacheValid = false; }
+    return isSmartCacheValid;
+}
+
+// 📌 മാറ്റങ്ങൾ വരുത്തുമ്പോൾ Cache അപ്ഡേറ്റ് ചെയ്യാനുള്ള ഫംഗ്ഷൻ
+async function triggerCacheUpdate() {
+    try {
+        const now = Date.now();
+        await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { lastUpdate: now }, { merge: true });
+        localStorage.setItem(`smart_time_${assignedClass}`, now);
+        isSmartCacheValid = true; 
+    } catch (e) {}
+}
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -64,13 +108,12 @@ function formatDate(dateStr) {
     if (!dateStr) return "-";
     if (String(dateStr).includes("-")) {
         const parts = String(dateStr).split("-");
-        if (parts[0].length === 4) { 
-            return `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
+        if (parts[0].length === 4) { return `${parts[2]}-${parts[1]}-${parts[0]}`; }
     }
     return dateStr;
 }
 
+// 📌 Cache വഴി സിങ്ക് ചെയ്ത് Reads കുറയ്ക്കുന്നു
 async function syncResultCache(term) {
     if (!madrasaUid || !assignedClass || !term) return;
     const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
@@ -83,14 +126,19 @@ async function syncResultCache(term) {
             publishDateTime = publishSnap.data().publishDateTime || "";
         }
 
-        const marksQuery = query(collection(db, "marks"), 
-            where("madrasaUid", "==", madrasaUid), 
-            where("className", "==", assignedClass), 
-            where("term", "==", term));
+        const cacheKey = `cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`;
+        let snapData = [];
         
-        const marksSnap = await getDocs(marksQuery);
+        if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
+            snapData = JSON.parse(localStorage.getItem(cacheKey));
+        } else {
+            const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
+            marksSnap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
+            localStorage.setItem(cacheKey, JSON.stringify(snapData));
+        }
+
         let marksMap = {};
-        marksSnap.forEach(doc => { marksMap[doc.data().studentId] = doc.data(); });
+        snapData.forEach(data => { marksMap[data.studentId] = data; });
 
         let allStudents = Object.values(studentsMap);
         allStudents.sort((a, b) => {
@@ -108,122 +156,87 @@ async function syncResultCache(term) {
 
             if (mData) {
                 classResults.push({
-                    rollNo: roll,
-                    studentId: st.id,
-                    studentName: st.name,
-                    admissionNo: st.admissionNo,
-                    gender: gen,
-                    className: assignedClass,
-                    marks: mData.marks,
-                    attendance: mData.attendance,
-                    totalMarks: mData.totalMarks,
-                    maxMarkTotal: mData.maxMarkTotal,
-                    percentage: mData.percentage,
-                    grade: mData.grade,
-                    status: mData.status,
-                    rank: mData.rank || "",
-                    subjectConfig: mData.subjectConfig
+                    rollNo: roll, studentId: st.id, studentName: st.name, admissionNo: st.admissionNo,
+                    gender: gen, className: assignedClass, marks: mData.marks, attendance: mData.attendance,
+                    totalMarks: mData.totalMarks, maxMarkTotal: mData.maxMarkTotal, percentage: mData.percentage,
+                    grade: mData.grade, status: mData.status, rank: mData.rank || "", subjectConfig: mData.subjectConfig
                 });
             }
         });
         
         await setDoc(doc(db, "result_cache", docId), {
-            madrasaUid,
-            className: assignedClass,
-            term,
-            isPublished,
-            publishDateTime,
-            lastUpdated: new Date().toISOString(),
-            resultsData: JSON.stringify(classResults)
+            madrasaUid, className: assignedClass, term, isPublished, publishDateTime,
+            lastUpdated: new Date().toISOString(), resultsData: JSON.stringify(classResults)
         });
-    } catch (e) {
-        console.error("Auto-Cache Sync Error:", e);
-    }
+    } catch (e) { console.error("Auto-Cache Sync Error:", e); }
 }
 
 async function loadTeacherData() {
     try {
-        const teacherDoc = await getDoc(doc(db, "users", teacherUid));
-        if (teacherDoc.exists()) {
-            const tData = teacherDoc.data();
+        let tData;
+        const cachedTeacher = localStorage.getItem(`cache_user_${teacherUid}`);
+        if (cachedTeacher) { tData = JSON.parse(cachedTeacher); } 
+        else {
+            const teacherDoc = await getDoc(doc(db, "users", teacherUid));
+            if (teacherDoc.exists()) {
+                tData = teacherDoc.data();
+                localStorage.setItem(`cache_user_${teacherUid}`, JSON.stringify(tData));
+            } else return;
+        }
             
-            const loggedInClass = localStorage.getItem('teacherCurrentClass');
-            assignedClass = loggedInClass;
+        assignedClass = localStorage.getItem('teacherCurrentClass') || (Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass));
+        madrasaUid = tData.madrasaUid;
+        teacherNameGlobal = tData.name;
             
-            if(!assignedClass) {
-                assignedClass = Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass);
-            }
+        await verifySmartCache(); // 📌 പ്രധാന ക്യാഷ് പരിശോധന
 
-            madrasaUid = tData.madrasaUid;
-            teacherNameGlobal = tData.name;
-            
-            let rawSubjects = [];
-            const subDoc = await getDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`));
-            
-            if(subDoc.exists()) {
-                rawSubjects = subDoc.data().subjects || [];
-                classMuallimName = subDoc.data().muallimName || ""; 
-            } else {
-                rawSubjects = tData.subjects || [];
-            }
-
-            if (rawSubjects.length === 0) {
-                try {
-                    const marksQ = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
-                    const marksSnap = await getDocs(marksQ);
-                    
-                    if (!marksSnap.empty) {
-                        for (let mDoc of marksSnap.docs) {
-                            if (mDoc.data().subjectConfig && mDoc.data().subjectConfig.length > 0) {
-                                rawSubjects = mDoc.data().subjectConfig;
-                                break; 
-                            }
-                        }
-                        
-                        if (rawSubjects.length > 0) {
-                            await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
-                                subjects: rawSubjects,
-                                madrasaUid: madrasaUid,
-                                className: assignedClass
-                            }, { merge: true });
-                        }
-                    }
-                } catch(e) { console.error("Subject recovery error:", e); }
-            }
-            
-            classSubjects = rawSubjects.map(sub => {
-                if(typeof sub === 'string') return { name: sub, maxMark: 100, passMark: 35 }; 
-                return sub;
-            });
-            
-            displayClassName.textContent = assignedClass;
-            
+        if (isSmartCacheValid && localStorage.getItem(`cache_admin_${madrasaUid}`)) {
+            const adminData = JSON.parse(localStorage.getItem(`cache_admin_${madrasaUid}`));
+            madrasaNameGlobal = adminData.madrasaNameGlobal;
+            customMadrasaId = adminData.customMadrasaId;
+        } else {
             const adminDoc = await getDoc(doc(db, "users", madrasaUid));
             if (adminDoc.exists()) {
                 madrasaNameGlobal = adminDoc.data().madrasaName || "MADRASA";
                 customMadrasaId = adminDoc.data().madrasaId || madrasaUid;
-                displayMadrasaName.textContent = madrasaNameGlobal;
+                localStorage.setItem(`cache_admin_${madrasaUid}`, JSON.stringify({ madrasaNameGlobal, customMadrasaId }));
             }
-
-            const savedExamTerm = localStorage.getItem('savedExamTerm');
-            if (savedExamTerm && document.getElementById("examTerm")) {
-                document.getElementById("examTerm").value = savedExamTerm;
-            }
-            
-            const savedViewTerm = localStorage.getItem('savedViewTerm');
-            if (savedViewTerm && document.getElementById("viewResultTerm")) {
-                document.getElementById("viewResultTerm").value = savedViewTerm;
-            }
-            
-            const savedPublishTerm = localStorage.getItem('savedPublishTerm');
-            if (savedPublishTerm && document.getElementById("publishTerm")) {
-                document.getElementById("publishTerm").value = savedPublishTerm;
-            }
-
-            renderSubjectsUI();
-            await loadStudents();
-            loadResults();
         }
+        displayMadrasaName.textContent = madrasaNameGlobal;
+        displayClassName.textContent = assignedClass;
+
+        if (isSmartCacheValid && localStorage.getItem(`cache_subs_${assignedClass}`)) {
+            const subData = JSON.parse(localStorage.getItem(`cache_subs_${assignedClass}`));
+            classSubjects = subData.subjects;
+            classMuallimName = subData.muallimName;
+        } else {
+            let rawSubjects = [];
+            const subDoc = await getDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`));
+            if(subDoc.exists()) {
+                rawSubjects = subDoc.data().subjects || [];
+                classMuallimName = subDoc.data().muallimName || ""; 
+            } else { rawSubjects = tData.subjects || []; }
+
+            classSubjects = rawSubjects.map(sub => {
+                if(typeof sub === 'string') return { name: sub, maxMark: 100, passMark: 35 }; 
+                return sub;
+            });
+            localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+        }
+
+        const savedExamTerm = localStorage.getItem('savedExamTerm');
+        if (savedExamTerm && document.getElementById("examTerm")) document.getElementById("examTerm").value = savedExamTerm;
+            
+        const savedViewTerm = localStorage.getItem('savedViewTerm');
+        if (savedViewTerm && document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = savedViewTerm;
+            
+        const savedPublishTerm = localStorage.getItem('savedPublishTerm');
+        if (savedPublishTerm && document.getElementById("publishTerm")) document.getElementById("publishTerm").value = savedPublishTerm;
+
+        renderSubjectsUI();
+        await loadStudents();
+        loadResults();
+        
     } catch (e) { console.error("Error loading teacher data", e); }
 }
 
@@ -276,20 +289,16 @@ document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     classSubjects.push({ name: newSub, maxMark, passMark });
     
     try { 
-        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
-            subjects: classSubjects,
-            madrasaUid: madrasaUid,
-            className: assignedClass
-        }, { merge: true }); 
+        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { subjects: classSubjects, madrasaUid, className: assignedClass }, { merge: true }); 
+        localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+        await triggerCacheUpdate();
         
         document.getElementById("newSubjectName").value = ""; 
         document.getElementById("newSubjectMaxMark").value = ""; 
         document.getElementById("newSubjectPassMark").value = ""; 
         renderSubjectsUI(); 
         loadResults(); 
-    } catch (e) {
-        alert("Error saving subject.");
-    }
+    } catch (e) { alert("Error saving subject."); }
 });
 
 window.deleteSubject = async (subName) => {
@@ -298,11 +307,7 @@ window.deleteSubject = async (subName) => {
     classSubjects = classSubjects.filter(s => s.name !== subName);
     
     try { 
-        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), {
-            subjects: classSubjects,
-            madrasaUid: madrasaUid,
-            className: assignedClass
-        }, { merge: true });
+        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { subjects: classSubjects, madrasaUid, className: assignedClass }, { merge: true });
         
         const marksQuery = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
         const marksSnap = await getDocs(marksQuery);
@@ -322,9 +327,8 @@ window.deleteSubject = async (subName) => {
                     newTotalMax += sub.maxMark;
                     const markVal = marksData[sub.name];
                     
-                    if (markVal === "A") {
-                        isPassed = false;
-                    } else if (markVal !== undefined && markVal !== "" && markVal !== "-") {
+                    if (markVal === "A") { isPassed = false; } 
+                    else if (markVal !== undefined && markVal !== "" && markVal !== "-") {
                         const num = Number(markVal);
                         newTotalObtained += num;
                         if (num < sub.passMark) isPassed = false;
@@ -335,26 +339,23 @@ window.deleteSubject = async (subName) => {
                 const finalGrade = getGrade(percentage, isPassed);
                 
                 return updateDoc(doc(db, "marks", markDoc.id), {
-                    marks: marksData,
-                    subjectConfig: subjectConfig,
-                    totalMarks: newTotalObtained,
-                    maxMarkTotal: newTotalMax,
-                    percentage: percentage,
-                    grade: finalGrade,
-                    status: isPassed ? "Passed" : "Failed"
+                    marks: marksData, subjectConfig: subjectConfig, totalMarks: newTotalObtained,
+                    maxMarkTotal: newTotalMax, percentage: percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
                 });
             }
         });
         
         await Promise.all(updatePromises);
         
+        localStorage.removeItem(`cache_subs_${assignedClass}`);
+        localStorage.removeItem(`cache_marks_${assignedClass}_${document.getElementById("viewResultTerm").value.replace(/\s+/g, '')}`);
+        isSmartCacheValid = false;
+        await triggerCacheUpdate();
+        
         renderSubjectsUI(); 
         loadResults(); 
         alert(`Subject '${subName}' and its marks deleted successfully!`);
-    } catch (e) {
-        console.error(e);
-        alert("Error deleting subject.");
-    }
+    } catch (e) { alert("Error deleting subject."); }
 };
 
 function renderSubjectsUI() {
@@ -395,17 +396,21 @@ document.getElementById("addStudentBtn").addEventListener("click", async () => {
 
     if (!name || !admissionNo) return alert("Name and Admission No are required.");
     
-    // 📌 അഡ്മിഷൻ നമ്പർ നിലവിലുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
     const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo));
-    if (exists) {
-        return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
-    }
+    if (exists) return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
     
     document.getElementById("addStudentBtn").textContent = "Saving...";
     try {
-        await addDoc(collection(db, "students"), { name, admissionNo, gender, dob, fatherName, place, contactNo, whatsappNo, className: assignedClass, madrasaUid });
+        const newStudentData = { name, admissionNo, gender, dob, fatherName, place, contactNo, whatsappNo, className: assignedClass, madrasaUid };
+        const newDocRef = await addDoc(collection(db, "students"), newStudentData);
+        
+        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
+        students.push({ id: newDocRef.id, ...newStudentData });
+        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        
+        await triggerCacheUpdate();
+        
         ['studentName', 'admissionNo', 'dob', 'fatherName', 'place', 'contactNo', 'whatsappNo'].forEach(id => document.getElementById(id).value = "");
-        clearCache(`cache_students_${assignedClass}`);
         await loadStudents();
     } catch (e) {}
     document.getElementById("addStudentBtn").textContent = "Save Student Data";
@@ -419,11 +424,11 @@ async function loadStudents() {
     const markSelect = document.getElementById("markStudentSelect");
     
     const cacheKey = `cache_students_${assignedClass}`;
-    const cachedData = localStorage.getItem(cacheKey);
     let students = [];
     
-    if (cachedData) { students = JSON.parse(cachedData); } 
-    else {
+    if (isSmartCacheValid && localStorage.getItem(cacheKey)) { 
+        students = JSON.parse(localStorage.getItem(cacheKey)); 
+    } else {
         const snap = await getDocs(query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass)));
         snap.forEach(doc => students.push({ id: doc.id, ...doc.data() }));
         localStorage.setItem(cacheKey, JSON.stringify(students));
@@ -449,11 +454,9 @@ async function loadStudents() {
     let labelCount = 0;
 
     students.forEach(st => {
-        // 📌 സിസ്റ്റം മാപ്പ് ചെയ്യുന്നത് ഒറിജിനൽ ഐഡി ഉപയോഗിച്ച്
         studentsMap[st.id] = st;
         const displayDob = formatDate(st.dob);
         
-        // 📌 എഡിറ്റ് ബട്ടണിലേക്ക് ഒറിജിനൽ ഐഡി നൽകുന്നു
         tbody.innerHTML += `<tr>
             <td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
             <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td>
@@ -490,12 +493,9 @@ async function loadStudents() {
     }
     
     const deskLabelsGridElement = document.getElementById("deskLabelsGrid");
-    if(deskLabelsGridElement) {
-        deskLabelsGridElement.innerHTML = deskLabelsHTML;
-    }
+    if(deskLabelsGridElement) deskLabelsGridElement.innerHTML = deskLabelsHTML;
 }
 
-// 📌 എഡിറ്റ് മോഡൽ തുറക്കുമ്പോൾ ഒറിജിനൽ ഐഡി സ്വീകരിക്കുന്നു
 window.openEditModal = (studentId) => {
     const st = studentsMap[studentId];
     if(!st) return;
@@ -517,21 +517,26 @@ document.getElementById("saveEditStudentBtn").addEventListener("click", async ()
     const admissionNo = document.getElementById("editAdNo").value.trim();
     if(!name || !admissionNo) return alert("Name & Ad No required");
     
-    // 📌 എഡിറ്റ് ചെയ്യുമ്പോഴും അഡ്മിഷൻ നമ്പർ ഡ്യൂപ്ലിക്കേറ്റ് വരുന്നുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
     const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo) && s.id !== id);
-    if(exists) {
-        return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
-    }
+    if(exists) return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
     
     document.getElementById("saveEditStudentBtn").textContent = "Saving...";
     try {
-        await updateDoc(doc(db, "students", id), {
+        const updatedData = {
             name, admissionNo, gender: document.getElementById("editGender").value,
             dob: document.getElementById("editDob").value, fatherName: document.getElementById("editFatherName").value.trim(),
             place: document.getElementById("editPlace").value.trim(), contactNo: document.getElementById("editContactNo").value.trim(),
             whatsappNo: document.getElementById("editWhatsappNo").value.trim()
-        });
-        clearCache(`cache_students_${assignedClass}`);
+        };
+        await updateDoc(doc(db, "students", id), updatedData);
+        
+        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
+        const index = students.findIndex(s => s.id === id);
+        if(index !== -1) students[index] = { ...students[index], ...updatedData };
+        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        
+        await triggerCacheUpdate();
+        
         editModalInstance.hide();
         await loadStudents();
     } catch (e) { alert("Error updating student"); }
@@ -544,8 +549,17 @@ window.deleteStudent = async (studentId) => {
         await deleteDoc(doc(db, "students", studentId));
         const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", studentId)));
         marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
-        clearCache(`cache_students_${assignedClass}`); 
+        
+        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
+        students = students.filter(s => s.id !== studentId);
+        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        
+        localStorage.removeItem(`cache_marks_${assignedClass}_${document.getElementById("viewResultTerm").value.replace(/\s+/g, '')}`);
+        isSmartCacheValid = false;
+        await triggerCacheUpdate();
+        
         await loadStudents();
+        loadResults();
     } catch (e) {}
 };
 
@@ -565,7 +579,12 @@ document.getElementById("processUpgradeBtn").addEventListener("click", async () 
     try {
         const updatePromises = Array.from(checkboxes).map(cb => updateDoc(doc(db, "students", cb.value), { className: String(targetClass) }));
         await Promise.all(updatePromises);
-        clearCache(`cache_students_${assignedClass}`); clearCache(`cache_students_${targetClass}`);
+        
+        localStorage.removeItem(`cache_students_${assignedClass}`); 
+        localStorage.removeItem(`cache_students_${targetClass}`);
+        isSmartCacheValid = false;
+        await triggerCacheUpdate();
+        
         alert(`Upgraded ${checkboxes.length} students.`);
         document.getElementById("selectAllUpgrade").checked = false;
         await loadStudents();
@@ -618,9 +637,7 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         const inp = document.querySelector(`.mark-input[data-subject="${sub.name}"]`);
         const val = inp.value.trim().toUpperCase();
         
-        if (val === "") {
-            marksData[sub.name] = ""; 
-        }
+        if (val === "") { marksData[sub.name] = ""; }
         else if (val === "A") { marksData[sub.name] = "A"; isPassed = false; }
         else {
             const num = Number(val);
@@ -646,14 +663,23 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     
     document.getElementById("saveMarksBtn").textContent = "Saving...";
     try {
-        await setDoc(doc(db, "marks", `${studentId}_${term.replace(/\s+/g, '')}`), {
+        const docId = `${studentId}_${term.replace(/\s+/g, '')}`;
+        const finalData = {
             studentId, studentName, madrasaUid, className: assignedClass, term,
             marks: marksData, attendance: document.getElementById("attendanceInput").value, 
             totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
-            subjectConfig: classSubjects,
-            percentage, grade: finalGrade, status: finalStatus
-        });
+            subjectConfig: classSubjects, percentage, grade: finalGrade, status: finalStatus
+        };
         
+        await setDoc(doc(db, "marks", docId), finalData);
+        
+        let snapData = JSON.parse(localStorage.getItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`) || "[]");
+        const index = snapData.findIndex(m => m.id === docId);
+        if (index !== -1) snapData[index] = { id: docId, ...finalData };
+        else snapData.push({ id: docId, ...finalData });
+        localStorage.setItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
+        
+        await triggerCacheUpdate();
         await syncResultCache(term);
         
         alert("Marks saved successfully!"); 
@@ -685,13 +711,9 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
                 
                 if (!nameKey || !admKey) continue;
                 
-                // 📌 എക്സൽ വഴി അപ്‌ലോഡ് ചെയ്യുമ്പോഴും അഡ്മിഷൻ നമ്പർ പരിശോധിക്കുന്നു
                 const newAdmNo = String(row[admKey]).trim();
                 const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === newAdmNo);
-                if (exists) {
-                    skippedCount++;
-                    continue; // നിലവിലുള്ള നമ്പറുകൾ ഒഴിവാക്കുന്നു
-                }
+                if (exists) { skippedCount++; continue; }
                 
                 const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob');
                 const fatherKey = Object.keys(row).find(k => k.toLowerCase() === 'fathername');
@@ -700,20 +722,17 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
                 const whatsappKey = Object.keys(row).find(k => k.toLowerCase() === 'whatsappno');
 
                 await addDoc(collection(db, "students"), {
-                    name: String(row[nameKey]).trim(),
-                    admissionNo: newAdmNo,
-                    gender: genderKey ? String(row[genderKey]).trim() : "Male",
-                    dob: dobKey ? String(row[dobKey]).trim() : "",
-                    fatherName: fatherKey ? String(row[fatherKey]).trim() : "",
-                    place: placeKey ? String(row[placeKey]).trim() : "",
-                    contactNo: contactKey ? String(row[contactKey]).trim() : "",
-                    whatsappNo: whatsappKey ? String(row[whatsappKey]).trim() : "",
-                    className: assignedClass, 
-                    madrasaUid
+                    name: String(row[nameKey]).trim(), admissionNo: newAdmNo, gender: genderKey ? String(row[genderKey]).trim() : "Male",
+                    dob: dobKey ? String(row[dobKey]).trim() : "", fatherName: fatherKey ? String(row[fatherKey]).trim() : "",
+                    place: placeKey ? String(row[placeKey]).trim() : "", contactNo: contactKey ? String(row[contactKey]).trim() : "",
+                    whatsappNo: whatsappKey ? String(row[whatsappKey]).trim() : "", className: assignedClass, madrasaUid
                 });
                 count++;
             }
-            clearCache(`cache_students_${assignedClass}`);
+            
+            localStorage.removeItem(`cache_students_${assignedClass}`);
+            isSmartCacheValid = false;
+            await triggerCacheUpdate();
             
             let alertMsg = `Uploaded ${count} students successfully.`;
             if (skippedCount > 0) alertMsg += `\n\n(Skipped ${skippedCount} students because their Admission Number already exists in this class).`;
@@ -740,7 +759,6 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
             const workbook = XLSX.read(data, { type: "array" });
             const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
             let count = 0;
-            
             let totalMaxPossible = classSubjects.reduce((sum, sub) => sum + sub.maxMark, 0);
 
             for (const row of json) {
@@ -748,7 +766,6 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                 const attKey = Object.keys(row).find(k => k.toLowerCase() === 'attendance');
                 if (!admKey) continue;
                 
-                // 📌 എക്സലിൽ നിന്ന് മാർക്ക് എടുക്കാൻ അഡ്മിഷൻ നമ്പർ വെച്ച് കുട്ടിയെ കണ്ടുപിടിക്കുന്നു
                 const excelAdm = String(row[admKey]).trim();
                 const student = Object.values(studentsMap).find(s => String(s.admissionNo) === excelAdm);
                 if (!student) continue;
@@ -759,12 +776,9 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
                     const subKey = Object.keys(row).find(k => k.toLowerCase() === sub.name.toLowerCase());
                     let val = subKey ? String(row[subKey]).trim().toUpperCase() : "";
                     
-                    if (val === "A") {
-                        marksData[sub.name] = "A";
-                        isPassed = false;
-                    } else if (val === "" || val === "-") {
-                        marksData[sub.name] = "";
-                    } else {
+                    if (val === "A") { marksData[sub.name] = "A"; isPassed = false; } 
+                    else if (val === "" || val === "-") { marksData[sub.name] = ""; } 
+                    else {
                         const num = Number(val);
                         if (isNaN(num) || num > sub.maxMark) { isValid = false; break; }
                         marksData[sub.name] = num;
@@ -784,13 +798,15 @@ document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
 
                 await setDoc(doc(db, "marks", docId), {
                     studentId: student.id, studentName: student.name, madrasaUid, className: assignedClass, term,
-                    marks: marksData, attendance: finalAtt,
-                    totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
-                    subjectConfig: classSubjects,
-                    percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
+                    marks: marksData, attendance: finalAtt, totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
+                    subjectConfig: classSubjects, percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
                 });
                 count++;
             }
+            
+            localStorage.removeItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`);
+            isSmartCacheValid = false;
+            await triggerCacheUpdate();
             
             await syncResultCache(term);
             
@@ -812,6 +828,10 @@ document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async
         const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
         const deletePromises = snap.docs.map(mDoc => deleteDoc(doc(db, "marks", mDoc.id)));
         await Promise.all(deletePromises);
+        
+        localStorage.removeItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`);
+        isSmartCacheValid = false;
+        await triggerCacheUpdate();
         
         await syncResultCache(term);
         
@@ -847,30 +867,30 @@ async function loadResults() {
     ['pdfMadrasaName1', 'pdfMadrasaName2'].forEach(id => document.getElementById(id).textContent = madrasaNameGlobal);
     document.getElementById("pdfExamTitle1").textContent = titleText;
     document.getElementById("pdfExamTitle2").textContent = titleText;
-    
     document.getElementById("pdfTeacherName1").textContent = classMuallimName ? classMuallimName.toUpperCase() : teacherNameGlobal;
     
-    const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
+    const cacheKey = `cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`;
+    let snapData = [];
+    
+    if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
+        snapData = JSON.parse(localStorage.getItem(cacheKey));
+    } else {
+        const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
+        snap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
+        localStorage.setItem(cacheKey, JSON.stringify(snapData));
+    }
     
     let marksMap = {};
-    snap.forEach(doc => { marksMap[doc.data().studentId] = { id: doc.id, ...doc.data() }; });
+    snapData.forEach(data => { marksMap[data.studentId] = data; });
 
     let results = [];
     
     Object.values(studentsMap).forEach(st => {
-        if (marksMap[st.id]) {
-            results.push(marksMap[st.id]);
-        } else {
+        if (marksMap[st.id]) { results.push(marksMap[st.id]); } 
+        else {
             results.push({
-                isPlaceholder: true, 
-                studentId: st.id,
-                studentName: st.name,
-                marks: {},
-                attendance: "",
-                totalMarks: "",
-                percentage: 0,
-                grade: "",
-                status: ""
+                isPlaceholder: true, studentId: st.id, studentName: st.name, marks: {},
+                attendance: "", totalMarks: "", percentage: 0, grade: "", status: ""
             });
         }
     });
@@ -882,21 +902,14 @@ async function loadResults() {
     }
     
     results.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
-    let rank = 1;
-    let hasMarks = false;
+    let rank = 1; let hasMarks = false;
 
     results.forEach(r => {
-        if (!r.isPlaceholder && r.totalMarks !== undefined && r.totalMarks !== "") {
-            hasMarks = true;
-        }
-        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") {
-            r.rank = "";
-        } else {
-            r.rank = rank++;
-        }
+        if (!r.isPlaceholder && r.totalMarks !== undefined && r.totalMarks !== "") { hasMarks = true; }
+        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") { r.rank = ""; } 
+        else { r.rank = rank++; }
     });
     
-    // 📌 റിസൾട്ട് ഓർഡർ ചെയ്യുന്നത് മാറ്റിയെഴുതിയിരിക്കുന്നു
     results.sort((a, b) => {
         const stA = studentsMap[a.studentId];
         const stB = studentsMap[b.studentId];
@@ -913,7 +926,6 @@ async function loadResults() {
     let boyRoll = 1, girlRoll = 1;
     
     results.forEach(res => {
-        // 📌 കുട്ടിയുടെ വിവരങ്ങൾ നേരിട്ട് എടുക്കുന്നു
         const st = studentsMap[res.studentId];
         const adNo = st ? st.admissionNo : "-";
         const gen = st ? st.gender : "Male";
@@ -944,9 +956,7 @@ async function loadResults() {
         }
         if (res.status === "Promoted") displayGrade = "D+"; 
 
-        let statusText = "";
-        let statusColor = "#000000";
-        let pdfPassText = "";
+        let statusText = ""; let statusColor = "#000000"; let pdfPassText = "";
 
         if (!res.isPlaceholder && res.status) {
             statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
@@ -959,8 +969,7 @@ async function loadResults() {
 
         sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
             <td>${attendanceDisp}</td>${marksHTMLScreen}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td>
-            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td>
-            <td>${actionBtn}</td></tr>`;
+            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td><td>${actionBtn}</td></tr>`;
             
         pBody1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
             <td>${attendanceDisp}</td>${marksHTMLPdf1}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
@@ -989,6 +998,12 @@ async function loadResults() {
 window.deleteMark = async (docId, term) => {
     if(!confirm("Delete this result?")) return;
     await deleteDoc(doc(db, "marks", docId));
+    
+    let snapData = JSON.parse(localStorage.getItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`) || "[]");
+    snapData = snapData.filter(m => m.id !== docId);
+    localStorage.setItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
+    
+    await triggerCacheUpdate();
     await syncResultCache(term);
     loadResults();
 };
@@ -1009,20 +1024,14 @@ async function loadPublishSettings(term) {
                 if(data.publishDateTime && new Date(data.publishDateTime) > new Date()) {
                     const dt = new Date(data.publishDateTime);
                     statusText.innerHTML = `<span style="color:#f59e0b;">⏳ Status: Scheduled to Publish on ${dt.getDate()}-${dt.getMonth()+1}-${dt.getFullYear()} at ${dt.toLocaleTimeString()}</span>`;
-                } else {
-                    statusText.innerHTML = `<span style="color:#27ae60;">✅ Status: Published (Visible to Students)</span>`;
-                }
-            } else {
-                statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Hidden from Students)</span>`;
-            }
+                } else { statusText.innerHTML = `<span style="color:#27ae60;">✅ Status: Published (Visible to Students)</span>`; }
+            } else { statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Hidden from Students)</span>`; }
         } else {
             document.getElementById("publishStatus").value = "hidden";
             document.getElementById("publishDateTime").value = "";
             statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Default)</span>`;
         }
-    } catch(e) {
-        console.error("Error loading publish settings", e);
-    }
+    } catch(e) { console.error("Error loading publish settings", e); }
 }
 
 document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
@@ -1036,22 +1045,13 @@ document.getElementById("savePublishSettingsBtn").addEventListener("click", asyn
     btn.disabled = true;
     
     try {
-        await setDoc(doc(db, "publish_settings", docId), {
-            madrasaUid,
-            className: assignedClass,
-            term,
-            isPublished,
-            publishDateTime
-        });
-        
+        await setDoc(doc(db, "publish_settings", docId), { madrasaUid, className: assignedClass, term, isPublished, publishDateTime });
+        await triggerCacheUpdate();
         await syncResultCache(term);
         
         alert(`Settings & Cache for ${term} synced successfully!`);
         loadPublishSettings(term);
-    } catch(e) {
-        console.error(e);
-        alert("Error saving settings & cache.");
-    }
+    } catch(e) { alert("Error saving settings & cache."); }
     
     btn.textContent = "Save & Sync Cache";
     btn.disabled = false;
@@ -1070,13 +1070,7 @@ async function generatePDF(areaId, fileName, orientation = 'p') {
     wrapper.style.opacity = "1";
     window.scrollTo(0, 0);
 
-    const canvasOptions = {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        scrollY: 0,
-        scrollX: 0
-    };
+    const canvasOptions = { scale: 2, useCORS: true, backgroundColor: "#ffffff", scrollY: 0, scrollX: 0 };
 
     if (areaId === 'pdfDeskLabelsArea') {
         const pages = area.querySelectorAll('.pdf-page-chunk');
@@ -1152,6 +1146,8 @@ document.getElementById("downloadDetailedPdfBtn").addEventListener("click", asyn
         
         try {
             await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { muallimName: finalName }, { merge: true });
+            localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+            await triggerCacheUpdate();
         } catch(e) {}
         
         const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
@@ -1173,7 +1169,5 @@ document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
     const resultUrl = `${window.location.origin}/result.html?mid=${customMadrasaId || madrasaUid}`;
     navigator.clipboard.writeText(resultUrl).then(() => {
         alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.\n\nLink: " + resultUrl);
-    }).catch(err => {
-        alert("Error copying link.");
-    });
+    }).catch(err => { alert("Error copying link."); });
 });
