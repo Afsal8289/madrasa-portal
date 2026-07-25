@@ -308,13 +308,47 @@
       document.getElementById("invalidLinkMsg").style.display = "block";
   }
 
+  // UI പോപ്പുലേറ്റ് ചെയ്യാനുള്ള ഹെൽപ്പർ ഫങ്ക്ഷൻ (പുതിയത്)
+  function applyMadrasaDataToUI(data) {
+      const formWrapper = document.getElementById("searchCard");
+      const invalidMsg = document.getElementById("invalidLinkMsg");
+      const classSelect = document.getElementById("studentClass");
+
+      formWrapper.style.display = "block";
+      if (invalidMsg) invalidMsg.style.display = "none";
+      
+      document.getElementById("madrasaNameDisplay").innerText = data.madrasaName || "Madrasa Name";
+      document.getElementById("madNameResult").innerText = data.madrasaName || "Madrasa Name";
+      
+      if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+          const classes = data.classes;
+          classSelect.innerHTML = '<option value="">-- Select Class --</option>';
+          classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
+          classes.forEach(c => {
+              classSelect.innerHTML += `<option value="${c}">${c}</option>`;
+          });
+      } else {
+          classSelect.innerHTML = '<option value="">No classes available</option>';
+      }
+  }
+
   async function verifyAndLoadMadrasa(mid) {
     try {
         mid = String(mid).trim();
         const formWrapper = document.getElementById("searchCard");
         const invalidMsg = document.getElementById("invalidLinkMsg");
-        const classSelect = document.getElementById("studentClass");
-        
+
+        // 📌 SMART CACHE: മദ്രസയുടെ ഡാറ്റ ബ്രൗസറിൽ നിന്ന് എടുക്കുന്നു (0 Reads)
+        const madrasaCacheKey = `madrasa_info_${mid}`;
+        const cachedMadrasa = sessionStorage.getItem(madrasaCacheKey);
+
+        if (cachedMadrasa) {
+            const data = JSON.parse(cachedMadrasa);
+            actualAdminUid = data.uid;
+            applyMadrasaDataToUI(data);
+            return;
+        }
+
         let adminDocSnap = null;
 
         if (mid.length > 15) {
@@ -346,23 +380,17 @@
         }
 
         if (actualAdminUid && adminDocSnap) {
-            formWrapper.style.display = "block";
-            if (invalidMsg) invalidMsg.style.display = "none";
+            const docData = adminDocSnap.data();
             
-            const data = adminDocSnap.data();
-            document.getElementById("madrasaNameDisplay").innerText = data.madrasaName || "Madrasa Name";
-            document.getElementById("madNameResult").innerText = data.madrasaName || "Madrasa Name";
+            // 📌 SMART CACHE: മദ്രസയുടെ ഡാറ്റ ബ്രൗസറിൽ സേവ് ചെയ്യുന്നു
+            const dataToCache = {
+                uid: actualAdminUid,
+                madrasaName: docData.madrasaName,
+                classes: docData.classes
+            };
+            sessionStorage.setItem(madrasaCacheKey, JSON.stringify(dataToCache));
             
-            if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
-                const classes = data.classes;
-                classSelect.innerHTML = '<option value="">-- Select Class --</option>';
-                classes.sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
-                classes.forEach(c => {
-                    classSelect.innerHTML += `<option value="${c}">${c}</option>`;
-                });
-            } else {
-                classSelect.innerHTML = '<option value="">No classes available</option>';
-            }
+            applyMadrasaDataToUI(dataToCache);
         } else {
             formWrapper.style.display = "none";
             if (invalidMsg) invalidMsg.style.display = "block";
@@ -407,10 +435,12 @@
           
           const cachedString = sessionStorage.getItem(localCacheKey);
 
+          // 📌 SMART CACHE: റിസൾട്ട് ബ്രൗസറിൽ സേവ് ചെയ്തിട്ടുണ്ടെങ്കിൽ അത് എടുക്കുന്നു
           if (cachedString) {
               classResults = JSON.parse(cachedString);
               usedLocalCache = true;
           } else {
+              // ഇല്ലെങ്കിൽ ഫയർബേസിൽ നിന്ന് 1-Read വഴി എടുക്കുന്നു
               const cacheSnap = await getDoc(doc(db, "result_cache", docId));
 
               if (!cacheSnap.exists()) {
@@ -439,13 +469,13 @@
           
           let targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
 
-          // മാറ്റം: ഫോണിലെ സേവ് ആയ ഡാറ്റയിൽ കുട്ടിയെ കണ്ടില്ലെങ്കിൽ ഒന്നുകൂടി ഫയർബേസിൽ പോയി നോക്കും
+          // ഫോണിലെ സേവ് ആയ ഡാറ്റയിൽ കുട്ടിയെ കണ്ടില്ലെങ്കിൽ ഒന്നുകൂടി ഫയർബേസിൽ പോയി നോക്കും
           if (!targetStudent && usedLocalCache) {
               const cacheSnap = await getDoc(doc(db, "result_cache", docId));
               if (cacheSnap.exists()) {
                   const cacheData = cacheSnap.data();
                   classResults = JSON.parse(cacheData.resultsData || "[]");
-                  sessionStorage.setItem(localCacheKey, JSON.stringify(classResults)); // അപ്ഡേറ്റ് ചെയ്യുന്നു
+                  sessionStorage.setItem(localCacheKey, JSON.stringify(classResults)); 
                   targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
               }
           }

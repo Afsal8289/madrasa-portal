@@ -27,6 +27,59 @@ let madrasaNameGlobal = "MADRASA";
 window.currentTcStudent = null;
 window.currentTcStudentId = null;
 let teachersDataList = {};
+let isSmartCacheValid = false; // 📌 Smart Cache Flag
+
+// 📌 പുതിയ സിങ്ക് ബട്ടൺ ചേർക്കുന്നു (Logout ബട്ടണിന്റെ അടുത്ത്)
+const syncBtn = document.createElement("button");
+syncBtn.innerHTML = "🔄 Sync Data";
+syncBtn.style = "background: #27ae60; color: white; margin-right: 15px; font-weight: bold; padding: 8px 16px; border: 1px solid #27ae60; border-radius: 6px; cursor: pointer; transition: 0.2s;";
+syncBtn.onclick = async () => {
+    syncBtn.textContent = "Syncing...";
+    localStorage.setItem(`admin_smart_time_${adminUid}`, "0"); 
+    isSmartCacheValid = false;
+    await loadMadrasaData(); 
+    await loadTeachersDirectory();    
+    await loadPendingAdmissions();
+    syncBtn.innerHTML = "🔄 Sync Data";
+    alert("ഡാറ്റ വിജയകരമായി സിങ്ക് ചെയ്തു!");
+};
+const logoutBtn = document.getElementById('logoutBtn');
+logoutBtn.parentNode.insertBefore(syncBtn, logoutBtn);
+
+// 📌 Admin Smart Cache പരിശോധിക്കാനുള്ള ഫംഗ്ഷൻ (1 Read മാത്രം)
+async function verifyAdminSmartCache() {
+    if(!adminUid) return false;
+    try {
+        const metaDoc = await getDoc(doc(db, "admin_meta", adminUid));
+        const serverTime = metaDoc.exists() ? metaDoc.data().lastUpdate : 0;
+        const localTime = localStorage.getItem(`admin_smart_time_${adminUid}`);
+
+        if (serverTime > 0 && String(serverTime) === String(localTime)) {
+            isSmartCacheValid = true;
+        } else {
+            isSmartCacheValid = false;
+            localStorage.setItem(`admin_smart_time_${adminUid}`, serverTime);
+        }
+    } catch(e) { isSmartCacheValid = false; }
+    return isSmartCacheValid;
+}
+
+// 📌 Admin ഡാറ്റ മാറ്റുമ്പോൾ Cache അപ്ഡേറ്റ് ചെയ്യാൻ
+async function triggerAdminCacheUpdate() {
+    try {
+        const now = Date.now();
+        await setDoc(doc(db, "admin_meta", adminUid), { lastUpdate: now }, { merge: true });
+        localStorage.setItem(`admin_smart_time_${adminUid}`, now);
+        isSmartCacheValid = true; 
+    } catch (e) {}
+}
+
+// 📌 ടീച്ചറുടെ ക്ലാസ്സിൽ മാറ്റം വരുമ്പോൾ (അഡ്മിഷൻ/TC) ടീച്ചർക്കും Cache അപ്ഡേറ്റ് കൊടുക്കാൻ
+async function triggerClassCacheUpdate(className) {
+    try {
+        await setDoc(doc(db, "class_meta", `${adminUid}_${className}`), { lastUpdate: Date.now() }, { merge: true });
+    } catch(e) {}
+}
 
 function formatDate(dateStr) {
     if (!dateStr) return "-";
@@ -37,13 +90,14 @@ function formatDate(dateStr) {
     return dateStr;
 }
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
+logoutBtn.addEventListener('click', () => {
     signOut(auth).then(() => { localStorage.clear(); window.location.href = "index.html"; });
 });
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         adminUid = user.uid;
+        await verifyAdminSmartCache(); // ആദ്യം സ്മാർട്ട് ക്യാഷ് പരിശോധിക്കുന്നു
         await loadMadrasaData(); 
         loadTeachersDirectory();    
         loadPendingAdmissions();
@@ -67,12 +121,29 @@ document.getElementById('copyResultLinkBtn').addEventListener('click', () => {
 });
 
 async function loadMadrasaData() {
+    const cacheKey = `cache_admin_data_${adminUid}`;
+    
+    if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
+        const data = JSON.parse(localStorage.getItem(cacheKey));
+        madrasaIdCode = data.madrasaId || adminUid; 
+        madrasaNameGlobal = data.madrasaName || "Madrasa Admin";
+        document.getElementById('madrasaNameDisplay').innerText = madrasaNameGlobal;
+        document.getElementById('pdfMadrasaNameForTeachers').innerText = madrasaNameGlobal;
+        localStorage.setItem('madrasaName', madrasaNameGlobal); 
+        const classes = data.classes || []; 
+        localStorage.setItem('madrasaClasses', JSON.stringify(classes)); 
+        updateClassUI(classes);
+        return;
+    }
+
     try {
         const docRef = doc(db, "users", adminUid);
         const docSnap = await getDoc(docRef);
         
         if(docSnap.exists()) {
             const data = docSnap.data();
+            localStorage.setItem(cacheKey, JSON.stringify(data)); // ഡാറ്റ ക്യാഷിലേക്ക് സേവ് ചെയ്യുന്നു
+            
             madrasaIdCode = data.madrasaId || adminUid; 
             madrasaNameGlobal = data.madrasaName || "Madrasa Admin";
             
@@ -128,6 +199,13 @@ async function deleteClass(className) {
         let cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
         cachedClasses = cachedClasses.filter(c => c !== className);
         localStorage.setItem('madrasaClasses', JSON.stringify(cachedClasses));
+        
+        // Update admin data cache
+        let adminData = JSON.parse(localStorage.getItem(`cache_admin_data_${adminUid}`) || "{}");
+        adminData.classes = cachedClasses;
+        localStorage.setItem(`cache_admin_data_${adminUid}`, JSON.stringify(adminData));
+        
+        await triggerAdminCacheUpdate();
         updateClassUI(cachedClasses);
     } catch (error) { alert("Error deleting class!"); }
 }
@@ -143,6 +221,12 @@ document.getElementById('addClassBtn').addEventListener('click', async () => {
         if(!cached.includes(newClass)) {
             cached.push(newClass);
             localStorage.setItem('madrasaClasses', JSON.stringify(cached));
+            
+            let adminData = JSON.parse(localStorage.getItem(`cache_admin_data_${adminUid}`) || "{}");
+            adminData.classes = cached;
+            localStorage.setItem(`cache_admin_data_${adminUid}`, JSON.stringify(adminData));
+            
+            await triggerAdminCacheUpdate();
             updateClassUI(cached); 
         }
         document.getElementById('newClassName').value = '';
@@ -225,53 +309,58 @@ document.getElementById('adminSavePublishBtn').addEventListener('click', async (
         });
         
         await Promise.all(promises);
-        
         document.getElementById('adminPublishStatusDisplay').innerHTML = `<span style="color:#27ae60;">✅ Status Updated Successfully!</span>`;
-        
-        if (clsSelection !== "ALL") {
-            setTimeout(loadAdminPublishStatus, 2000);
-        }
-
-    } catch(e) { 
-        alert("Error saving settings."); 
-    }
+        if (clsSelection !== "ALL") { setTimeout(loadAdminPublishStatus, 2000); }
+    } catch(e) { alert("Error saving settings."); }
     btn.innerText = originalText;
 });
 
 
 async function loadPendingAdmissions() {
     const tbody = document.getElementById('pendingAdmissionsBody');
-    try {
-        const q = query(collection(db, "admissions"), where("madrasaUid", "==", adminUid), where("status", "==", "pending"));
-        const snapshot = await getDocs(q);
-        
-        tbody.innerHTML = '';
-        if(snapshot.empty) return tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #7f8c8d;">No pending admissions</td></tr>';
+    const cacheKey = `cache_admissions_${adminUid}`;
+    let admissionsArray = [];
 
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            let displayDate = "-";
-            if(data.appliedDate) {
-                const d = data.appliedDate.toDate();
-                displayDate = `${d.getDate()}-${d.getMonth()+1}-${d.getFullYear()}`;
-            }
+    if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
+        admissionsArray = JSON.parse(localStorage.getItem(cacheKey));
+    } else {
+        try {
+            const q = query(collection(db, "admissions"), where("madrasaUid", "==", adminUid), where("status", "==", "pending"));
+            const snapshot = await getDocs(q);
+            snapshot.forEach(docSnap => {
+                let data = docSnap.data();
+                data.id = docSnap.id;
+                if(data.appliedDate) data.appliedDateStr = data.appliedDate.toDate().toISOString(); // Serialize date
+                admissionsArray.push(data);
+            });
+            localStorage.setItem(cacheKey, JSON.stringify(admissionsArray));
+        } catch(e) { console.error("Error loading admissions", e); return; }
+    }
+    
+    tbody.innerHTML = '';
+    if(admissionsArray.length === 0) return tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #7f8c8d;">No pending admissions</td></tr>';
 
-            const relationPrefix = data.gender === "Female" ? "D/o" : "S/o";
+    admissionsArray.forEach(data => {
+        let displayDate = "-";
+        if(data.appliedDateStr) {
+            const d = new Date(data.appliedDateStr);
+            displayDate = `${d.getDate()}-${d.getMonth()+1}-${d.getFullYear()}`;
+        }
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${displayDate}</td>
-                <td><b>${data.name}</b><br><small>${relationPrefix}: ${data.fatherName}</small></td>
-                <td>${data.appliedClass}</td>
-                <td>${data.place}<br><small>${data.contactNo}</small></td>
-                <td style="white-space: nowrap;">
-                    <button class="btn-small btn-green" onclick="approveAdmission('${docSnap.id}', '${data.name}', '${data.appliedClass}', '${data.gender}', '${data.dob}', '${data.fatherName}', '${data.place}', '${data.contactNo}', '${data.whatsappNo}')">Approve</button>
-                    <button class="btn-small btn-red" onclick="rejectAdmission('${docSnap.id}')">Reject</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    } catch(e) { console.error("Error loading admissions", e); }
+        const relationPrefix = data.gender === "Female" ? "D/o" : "S/o";
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${displayDate}</td>
+            <td><b>${data.name}</b><br><small>${relationPrefix}: ${data.fatherName}</small></td>
+            <td>${data.appliedClass}</td>
+            <td>${data.place}<br><small>${data.contactNo}</small></td>
+            <td style="white-space: nowrap;">
+                <button class="btn-small btn-green" onclick="approveAdmission('${data.id}', '${data.name}', '${data.appliedClass}', '${data.gender}', '${data.dob}', '${data.fatherName}', '${data.place}', '${data.contactNo}', '${data.whatsappNo}')">Approve</button>
+                <button class="btn-small btn-red" onclick="rejectAdmission('${data.id}')">Reject</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 window.approveAdmission = async (docId, name, cls, gender, dob, fatherName, place, contactNo, whatsappNo) => {
@@ -283,7 +372,12 @@ window.approveAdmission = async (docId, name, cls, gender, dob, fatherName, plac
             name, admissionNo: adNo, className: cls, gender, dob, fatherName, place, contactNo, whatsappNo, madrasaUid: adminUid
         });
         await updateDoc(doc(db, "admissions", docId), { status: "approved" });
+        
+        await triggerAdminCacheUpdate(); // അഡ്മിൻ കാഷ് പുതുക്കുന്നു
+        await triggerClassCacheUpdate(cls); // ടീച്ചറുടെ കാഷ് അപ്ഡേറ്റ് ആവാൻ നിർദ്ദേശം നൽകുന്നു
+        
         alert("Student approved and successfully added to the Teacher's class list!");
+        isSmartCacheValid = false;
         loadPendingAdmissions();
     } catch (e) { alert("Error approving student."); }
 };
@@ -292,137 +386,135 @@ window.rejectAdmission = async (docId) => {
     if(!confirm("Are you sure you want to reject and delete this application?")) return;
     try {
         await deleteDoc(doc(db, "admissions", docId));
+        await triggerAdminCacheUpdate();
+        isSmartCacheValid = false;
         loadPendingAdmissions();
     } catch (e) { alert("Error rejecting application."); }
 };
 
 
-// 📌 TEACHERS DIRECTORY (No Auth Creation, Just Data Saving)
+// 📌 TEACHERS DIRECTORY
 document.getElementById('saveTeacherBtn').addEventListener('click', async () => {
     const name = document.getElementById('tName').value.trim();
     const cls = document.getElementById('tClassSelect').value;
     const phone = document.getElementById('tPhone').value.trim();
     const whatsapp = document.getElementById('tWhatsapp').value.trim();
 
-    if(!name || !cls) {
-        return alert("Please enter Teacher Name and select a Class!");
-    }
+    if(!name || !cls) return alert("Please enter Teacher Name and select a Class!");
 
     document.getElementById('saveTeacherBtn').innerText = "Saving...";
 
     try {
         await addDoc(collection(db, "teachers_directory"), {
-            name: name,
-            assignedClass: cls,
-            phone: phone,
-            whatsapp: whatsapp,
-            madrasaUid: adminUid
+            name: name, assignedClass: cls, phone: phone, whatsapp: whatsapp, madrasaUid: adminUid
         });
         
+        await triggerAdminCacheUpdate();
         alert("Teacher details saved successfully!");
+        
         document.getElementById('tName').value = '';
         document.getElementById('tClassSelect').value = '';
         document.getElementById('tPhone').value = '';
         document.getElementById('tWhatsapp').value = '';
         
+        isSmartCacheValid = false;
         loadTeachersDirectory();
-    } catch (error) {
-        alert("Error saving details: " + error.message);
-    }
+    } catch (error) { alert("Error saving details: " + error.message); }
     document.getElementById('saveTeacherBtn').innerText = "Save Details";
 });
 
 async function loadTeachersDirectory() {
     const tbody = document.getElementById('teacherTableBody');
     const pdfBody = document.getElementById('pdfTeachersTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Loading data...</td></tr>';
+    const cacheKey = `cache_teachers_${adminUid}`;
+    let teachersArray = [];
+
+    if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
+        teachersArray = JSON.parse(localStorage.getItem(cacheKey));
+    } else {
+        try {
+            const q = query(collection(db, "teachers_directory"), where("madrasaUid", "==", adminUid));
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach((doc) => {
+                let data = doc.data();
+                data.id = doc.id;
+                teachersArray.push(data);
+            });
+            localStorage.setItem(cacheKey, JSON.stringify(teachersArray));
+        } catch (error) { console.error("Error loading teachers:", error); return; }
+    }
     
-    try {
-        const q = query(collection(db, "teachers_directory"), where("madrasaUid", "==", adminUid));
-        const querySnapshot = await getDocs(q);
-        
-        tbody.innerHTML = '';
-        pdfBody.innerHTML = '';
-        teachersDataList = {}; 
-        let teachersArray = [];
+    tbody.innerHTML = '';
+    pdfBody.innerHTML = '';
+    teachersDataList = {}; 
 
-        querySnapshot.forEach((documentSnapshot) => {
-            const data = documentSnapshot.data();
-            data.id = documentSnapshot.id; 
-            teachersArray.push(data);
-            teachersDataList[data.id] = data; 
-        });
+    if(teachersArray.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No Teachers added yet.</td></tr>';
+        return;
+    }
+    
+    teachersArray.sort((a, b) => a.assignedClass.localeCompare(b.assignedClass, undefined, {numeric: true, sensitivity: 'base'}));
 
-        if(teachersArray.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No Teachers added yet.</td></tr>';
-            return;
-        }
-        
-        // സോർട്ട് ചെയ്യുന്നു (ക്ലാസ്സ് അടിസ്ഥാനത്തിൽ)
-        teachersArray.sort((a, b) => a.assignedClass.localeCompare(b.assignedClass, undefined, {numeric: true, sensitivity: 'base'}));
+    let slNo = 1;
+    teachersArray.forEach((data) => {
+        teachersDataList[data.id] = data; 
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><b>${data.name}</b></td>
+            <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
+            <td>${data.phone || '-'}</td>
+            <td>${data.whatsapp || '-'}</td>
+            <td>
+                <button class="btn-small edit-t-btn" data-id="${data.id}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
+                <button class="btn-small btn-red delete-btn" data-id="${data.id}">Del</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
 
-        let slNo = 1;
-        teachersArray.forEach((data) => {
-            // സ്ക്രീനിൽ കാണിക്കാൻ
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><b>${data.name}</b></td>
-                <td><span style="background:#e8f4f8; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:bold;">${data.assignedClass}</span></td>
-                <td>${data.phone || '-'}</td>
-                <td>${data.whatsapp || '-'}</td>
-                <td>
-                    <button class="btn-small edit-t-btn" data-id="${data.id}" style="background-color: #f39c12; margin-right: 5px;">Edit</button>
-                    <button class="btn-small btn-red delete-btn" data-id="${data.id}">Del</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
+        const pdfTr = document.createElement('tr');
+        pdfTr.innerHTML = `
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${slNo++}</td>
+            <td style="border: 1px solid #000; padding: 10px;"><b>${data.name.toUpperCase()}</b></td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center; font-weight: bold;">${data.assignedClass}</td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${data.phone || '-'}</td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${data.whatsapp || '-'}</td>
+        `;
+        pdfBody.appendChild(pdfTr);
+    });
 
-            // PDF-ൽ കാണിക്കാൻ
-            const pdfTr = document.createElement('tr');
-            pdfTr.innerHTML = `
-                <td style="border: 1px solid #000; padding: 10px; text-align: center;">${slNo++}</td>
-                <td style="border: 1px solid #000; padding: 10px;"><b>${data.name.toUpperCase()}</b></td>
-                <td style="border: 1px solid #000; padding: 10px; text-align: center; font-weight: bold;">${data.assignedClass}</td>
-                <td style="border: 1px solid #000; padding: 10px; text-align: center;">${data.phone || '-'}</td>
-                <td style="border: 1px solid #000; padding: 10px; text-align: center;">${data.whatsapp || '-'}</td>
-            `;
-            pdfBody.appendChild(pdfTr);
-        });
+    document.querySelectorAll('.edit-t-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tId = e.target.getAttribute('data-id');
+            const tData = teachersDataList[tId];
+            
+            document.getElementById('editTeacherId').value = tId;
+            document.getElementById('editTeacherName').value = tData.name;
+            document.getElementById('editTeacherPhone').value = tData.phone || '';
+            document.getElementById('editTeacherWhatsapp').value = tData.whatsapp || '';
 
-        // എഡിറ്റ് ചെയ്യാൻ
-        document.querySelectorAll('.edit-t-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const tId = e.target.getAttribute('data-id');
-                const tData = teachersDataList[tId];
-                
-                document.getElementById('editTeacherId').value = tId;
-                document.getElementById('editTeacherName').value = tData.name;
-                document.getElementById('editTeacherPhone').value = tData.phone || '';
-                document.getElementById('editTeacherWhatsapp').value = tData.whatsapp || '';
-
-                const editSelect = document.getElementById('editTeacherClassSelect');
-                editSelect.innerHTML = '<option value="">Select Assigned Class</option>';
-                const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
-                cachedClasses.forEach(cls => {
-                    const isSelected = (cls === tData.assignedClass) ? "selected" : "";
-                    editSelect.innerHTML += `<option value="${cls}" ${isSelected}>${cls}</option>`;
-                });
-                
-                document.getElementById('editTeacherModal').classList.remove('hidden');
+            const editSelect = document.getElementById('editTeacherClassSelect');
+            editSelect.innerHTML = '<option value="">Select Assigned Class</option>';
+            const cachedClasses = JSON.parse(localStorage.getItem('madrasaClasses')) || [];
+            cachedClasses.forEach(cls => {
+                const isSelected = (cls === tData.assignedClass) ? "selected" : "";
+                editSelect.innerHTML += `<option value="${cls}" ${isSelected}>${cls}</option>`;
             });
+            
+            document.getElementById('editTeacherModal').classList.remove('hidden');
         });
+    });
 
-        // ഡിലീറ്റ് ചെയ്യാൻ
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const tId = e.target.getAttribute('data-id');
-                if(confirm("Are you sure you want to delete this teacher's details?")) { 
-                    await deleteDoc(doc(db, "teachers_directory", tId)); 
-                    loadTeachersDirectory(); 
-                }
-            });
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const tId = e.target.getAttribute('data-id');
+            if(confirm("Are you sure you want to delete this teacher's details?")) { 
+                await deleteDoc(doc(db, "teachers_directory", tId)); 
+                await triggerAdminCacheUpdate();
+                isSmartCacheValid = false;
+                loadTeachersDirectory(); 
+            }
         });
-    } catch (error) { console.error("Error loading teachers:", error); }
+    });
 }
 
 document.getElementById('saveTeacherEditBtn').addEventListener('click', async () => {
@@ -437,17 +529,14 @@ document.getElementById('saveTeacherEditBtn').addEventListener('click', async ()
     document.getElementById('saveTeacherEditBtn').innerText = "Saving...";
     try {
         await updateDoc(doc(db, "teachers_directory", tId), {
-            name: newName,
-            assignedClass: newClass,
-            phone: newPhone,
-            whatsapp: newWhatsapp
+            name: newName, assignedClass: newClass, phone: newPhone, whatsapp: newWhatsapp
         });
+        await triggerAdminCacheUpdate();
         alert("Teacher details updated successfully!");
         document.getElementById('editTeacherModal').classList.add('hidden');
+        isSmartCacheValid = false;
         loadTeachersDirectory();
-    } catch (error) {
-        alert("Error updating teacher");
-    }
+    } catch (error) { alert("Error updating teacher"); }
     document.getElementById('saveTeacherEditBtn').innerText = "Save Changes";
 });
 
@@ -462,7 +551,6 @@ document.getElementById('downloadTeachersPdfBtn').addEventListener('click', () =
         const imgData = canvas.toDataURL("image/png");
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
         let imgWidth = pdfWidth - 20; 
         let imgHeight = (canvas.height * imgWidth) / canvas.width;
         
@@ -560,7 +648,6 @@ window.generateTCAndRemove = async () => {
         const imgData = canvas.toDataURL("image/png");
         const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
         let imgWidth = pdfWidth;
         let imgHeight = (canvas.height * pdfWidth) / canvas.width;
         
@@ -573,6 +660,8 @@ window.generateTCAndRemove = async () => {
             await deleteDoc(doc(db, "students", docId));
             const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", docId)));
             marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
+            
+            await triggerClassCacheUpdate(student.className); // കുട്ടി ഒഴിവാക്കപ്പെട്ടതിനാൽ ടീച്ചറുടെ കാഷ് അപ്ഡേറ്റ് ആവാൻ നിർദ്ദേശം നൽകുന്നു
             
             document.getElementById('tcStudentDetails').innerHTML = `<p style="color:green; font-weight:bold; margin:0; padding: 20px; text-align: center;">TC Generated & Student Removed Successfully!</p>`;
         } catch (e) { alert("Error removing student from database."); }
