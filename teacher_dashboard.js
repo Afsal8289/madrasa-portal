@@ -113,8 +113,8 @@ function setupTransferMarksUI() {
                 const data = mDoc.data();
                 const newDocId = `${data.studentId}_${toTerm.replace(/\s+/g, '')}`;
                 data.term = toTerm; 
-                batchPromises.push(setDoc(doc(db, "marks", newDocId), data)); // പുതിയതിൽ സേവ് ചെയ്യുന്നു
-                batchPromises.push(deleteDoc(doc(db, "marks", mDoc.id))); // പഴയതിൽ നിന്ന് ഡിലീറ്റ് ചെയ്യുന്നു
+                batchPromises.push(setDoc(doc(db, "marks", newDocId), data)); 
+                batchPromises.push(deleteDoc(doc(db, "marks", mDoc.id))); 
             });
             
             await Promise.all(batchPromises);
@@ -128,11 +128,9 @@ function setupTransferMarksUI() {
             
             alert(`വിജയകരം! ${snap.size} കുട്ടികളുടെ മാർക്കുകൾ '${fromTerm}' ൽ നിന്നും '${toTerm}' ലേക്ക് മാറ്റി.`);
             
-            // UI അപ്ഡേറ്റ്
             if(document.getElementById("examTerm")) document.getElementById("examTerm").value = toTerm;
             if(document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = toTerm;
             
-            // ഫയർബേസിലും ആക്ടീവ് ടേം അപ്ഡേറ്റ് ചെയ്യുന്നു
             await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: toTerm }, { merge: true });
             
             loadResults();
@@ -307,14 +305,12 @@ async function loadTeacherData() {
             safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
         }
 
-        // 📌 PULLING EXAM TERM DIRECTLY FROM FIREBASE (NOT LOCAL STORAGE)
         const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
         let activeExamTerm = "Monthly Test"; // Default
         if(metaDoc.exists() && metaDoc.data().currentExamTerm) {
             activeExamTerm = metaDoc.data().currentExamTerm;
         }
 
-        // പഴയ ലോക്കൽ സ്റ്റോറേജ് ഡിലീറ്റ് ചെയ്യുന്നു
         localStorage.removeItem('savedExamTerm');
         localStorage.removeItem('savedViewTerm');
 
@@ -344,7 +340,6 @@ function setupTabs() {
     });
 }
 
-// 📌 SAVING EXAM TERM DIRECTLY TO FIREBASE
 if (document.getElementById("examTerm")) {
     document.getElementById("examTerm").addEventListener("change", async (e) => {
         const newTerm = e.target.value;
@@ -718,6 +713,7 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
     }
 });
 
+// 📌 ഇവിടെയാണ് മാറ്റം വരുത്തിയിട്ടുള്ളത് (Switch back to Results Tab)
 document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     const select = document.getElementById("markStudentSelect"); const studentId = select.value;
     if (!studentId) return alert("Select a student");
@@ -785,6 +781,18 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
         if(forcePromoteCheck) forcePromoteCheck.checked = false;
         loadResults();
+
+        // 📌 സ്ക്രീൻ ഓട്ടോമാറ്റിക് ആയി Results ടാബിലേക്ക് മാറാനുള്ള കോഡ്
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        
+        const resultsTabBtn = document.querySelector('[data-tab="tab-results"]');
+        const resultsTabContent = document.getElementById("tab-results");
+        
+        if (resultsTabBtn) resultsTabBtn.classList.add("active");
+        if (resultsTabContent) resultsTabContent.classList.add("active");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
     } catch (e) {}
     document.getElementById("saveMarksBtn").textContent = "Save Marks";
 });
@@ -1064,7 +1072,11 @@ async function loadResults() {
             pdfPassText = statusText === "FAILED" ? "F" : (statusText === "PROMOTED" ? "PR" : "P");
         }
 
-        const actionBtn = res.isPlaceholder ? "" : `<button class="btn-custom btn-danger-custom btn-small" onclick="deleteMark('${res.id}', '${term}')">Del</button>`;
+        const actionBtn = res.isPlaceholder ? "" : `
+            <div style="display:flex; gap:4px; justify-content:center;">
+                <button class="btn-custom btn-warning-custom btn-small" style="padding:4px 8px; font-size:11px;" onclick="editMark('${res.studentId}', '${term}')">Edit</button>
+                <button class="btn-custom btn-danger-custom btn-small" style="padding:4px 8px; font-size:11px;" onclick="deleteMark('${res.id}', '${term}')">Del</button>
+            </div>`;
         const attendanceDisp = (res.attendance && res.attendance !== "-") ? res.attendance : "";
 
         sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
@@ -1094,6 +1106,30 @@ async function loadResults() {
         document.getElementById("pdfPerc1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
     }
 }
+
+window.editMark = (studentId, term) => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+    
+    const marksTabBtn = document.querySelector('[data-tab="tab-marks"]');
+    const marksTabContent = document.getElementById("tab-marks");
+    
+    if (marksTabBtn) marksTabBtn.classList.add("active");
+    if (marksTabContent) marksTabContent.classList.add("active");
+
+    const examTermSelect = document.getElementById("examTerm");
+    if (examTermSelect) {
+        examTermSelect.value = term;
+    }
+
+    const studentSelect = document.getElementById("markStudentSelect");
+    if (studentSelect) {
+        studentSelect.value = studentId;
+        studentSelect.dispatchEvent(new Event('change'));
+    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
 window.deleteMark = async (docId, term) => {
     if(!confirm("Delete this result?")) return;
