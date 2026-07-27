@@ -28,28 +28,121 @@ let classSubjects = [];
 let studentsMap = {};
 let editModalInstance = null;
 let classMuallimName = ""; 
-let isSmartCacheValid = false; // 📌 Smart Cache Flag
+let isSmartCacheValid = false; 
 
 const displayMadrasaName = document.getElementById("displayMadrasaName");
 const displayClassName = document.getElementById("displayClassName");
 const logoutBtn = document.getElementById("logoutBtn");
 
-// 📌 പുതിയ സിങ്ക് ബട്ടൺ ചേർക്കുന്നു
+function safeSetCache(key, value) {
+    try { localStorage.setItem(key, value); } 
+    catch (e) { console.warn("Cache issue"); localStorage.removeItem(key); }
+}
+
 const syncBtn = document.createElement("button");
 syncBtn.innerHTML = "🔄 Sync Data";
 syncBtn.className = "btn-custom btn-small";
 syncBtn.style = "background: #27ae60; color: white; margin-right: 15px; font-weight: bold;";
 syncBtn.onclick = async () => {
     syncBtn.textContent = "Syncing...";
-    localStorage.setItem(`smart_time_${assignedClass}`, "0"); 
+    const currentTerm = document.getElementById("viewResultTerm").value.replace(/\s+/g, '');
+    localStorage.removeItem(`smart_time_${assignedClass}`);
+    localStorage.removeItem(`cache_students_${assignedClass}`);
+    localStorage.removeItem(`cache_subs_${assignedClass}`);
+    localStorage.removeItem(`cache_marks_${assignedClass}_${currentTerm}`);
     isSmartCacheValid = false;
     await loadTeacherData();
     syncBtn.innerHTML = "🔄 Sync Data";
-    alert("ഡാറ്റ വിജയകരമായി സിങ്ക് ചെയ്തു!");
+    alert("പുതിയ മാറ്റങ്ങൾ മാത്രം വിജയകരമായി അപ്ഡേറ്റ് ചെയ്തു!");
 };
 logoutBtn.parentNode.insertBefore(syncBtn, logoutBtn);
 
-// 📌 Smart Cache പരിശോധിക്കാനുള്ള ഫംഗ്ഷൻ
+
+// 📌 തെറ്റായ എക്സാമിൽ ചേർത്ത മാർക്കുകൾ മാറ്റാനുള്ള (Transfer Marks) പുതിയ UI
+function setupTransferMarksUI() {
+    const actionArea = document.getElementById("deleteAllMarksTermBtn");
+    if (!actionArea || document.getElementById("transferMarksContainer")) return;
+
+    const transferDiv = document.createElement("div");
+    transferDiv.id = "transferMarksContainer";
+    transferDiv.innerHTML = `
+        <div style="background:#fff3cd; border:1px solid #ffe69c; padding:15px; border-radius:8px; margin-top:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <h6 style="color:#856404; margin-top:0; margin-bottom:12px; font-weight:bold; font-size:14px;"><i class="fas fa-exchange-alt"></i> തെറ്റായ എക്സാമിൽ നൽകിയ മാർക്കുകൾ മാറ്റാൻ (Transfer Marks)</h6>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <select id="transferFromTerm" class="form-control" style="flex:1; min-width:130px;">
+                    <option value="">From (മാറ്റേണ്ടത്)</option>
+                    <option value="Monthly Test">Monthly Test</option>
+                    <option value="Quarterly Exam">Quarterly Exam</option>
+                    <option value="Half Yearly Exam">Half Yearly Exam</option>
+                    <option value="Annual Exam">Annual Exam</option>
+                </select>
+                <i class="fas fa-arrow-right" style="color:#856404;"></i>
+                <select id="transferToTerm" class="form-control" style="flex:1; min-width:130px;">
+                    <option value="">To (ശരിയായത്)</option>
+                    <option value="Monthly Test">Monthly Test</option>
+                    <option value="Quarterly Exam">Quarterly Exam</option>
+                    <option value="Half Yearly Exam">Half Yearly Exam</option>
+                    <option value="Annual Exam">Annual Exam</option>
+                </select>
+                <button id="processTransferBtn" class="btn-custom btn-warning-custom btn-small" style="font-weight:bold;">Move Marks</button>
+            </div>
+        </div>
+    `;
+    actionArea.parentElement.appendChild(transferDiv);
+
+    document.getElementById("processTransferBtn").addEventListener("click", async () => {
+        const fromTerm = document.getElementById("transferFromTerm").value;
+        const toTerm = document.getElementById("transferToTerm").value;
+        
+        if(!fromTerm || !toTerm) return alert("ദയവായി രണ്ട് എക്സാമുകളും സെലക്ട് ചെയ്യുക.");
+        if(fromTerm === toTerm) return alert("രണ്ടും ഒരേ എക്സാം ആണ്. മാറ്റാൻ സാധിക്കില്ല.");
+        if(!confirm(`തീർച്ചയാണോ? '${fromTerm}' -ലെ എല്ലാ മാർക്കുകളും പൂർണ്ണമായും '${toTerm}' ലേക്ക് മാറ്റുകയാണോ?`)) return;
+        
+        const btn = document.getElementById("processTransferBtn");
+        btn.textContent = "Moving..."; btn.disabled = true;
+        
+        try {
+            const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", fromTerm)));
+            if(snap.empty) {
+                alert(`'${fromTerm}' ൽ മാറ്റാൻ മാർക്കുകൾ ഒന്നും കണ്ടെത്തിയില്ല.`);
+                btn.textContent = "Move Marks"; btn.disabled = false; return;
+            }
+            
+            const batchPromises = [];
+            snap.docs.forEach(mDoc => {
+                const data = mDoc.data();
+                const newDocId = `${data.studentId}_${toTerm.replace(/\s+/g, '')}`;
+                data.term = toTerm; 
+                batchPromises.push(setDoc(doc(db, "marks", newDocId), data)); // പുതിയതിൽ സേവ് ചെയ്യുന്നു
+                batchPromises.push(deleteDoc(doc(db, "marks", mDoc.id))); // പഴയതിൽ നിന്ന് ഡിലീറ്റ് ചെയ്യുന്നു
+            });
+            
+            await Promise.all(batchPromises);
+            
+            localStorage.removeItem(`cache_marks_${assignedClass}_${fromTerm.replace(/\s+/g, '')}`);
+            localStorage.removeItem(`cache_marks_${assignedClass}_${toTerm.replace(/\s+/g, '')}`);
+            isSmartCacheValid = false;
+            await triggerCacheUpdate();
+            await syncResultCache(fromTerm);
+            await syncResultCache(toTerm);
+            
+            alert(`വിജയകരം! ${snap.size} കുട്ടികളുടെ മാർക്കുകൾ '${fromTerm}' ൽ നിന്നും '${toTerm}' ലേക്ക് മാറ്റി.`);
+            
+            // UI അപ്ഡേറ്റ്
+            if(document.getElementById("examTerm")) document.getElementById("examTerm").value = toTerm;
+            if(document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = toTerm;
+            
+            // ഫയർബേസിലും ആക്ടീവ് ടേം അപ്ഡേറ്റ് ചെയ്യുന്നു
+            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: toTerm }, { merge: true });
+            
+            loadResults();
+        } catch(e) { console.error(e); alert("Error moving marks."); }
+        
+        btn.textContent = "Move Marks"; btn.disabled = false;
+    });
+}
+
+
 async function verifySmartCache() {
     if(!madrasaUid || !assignedClass) return false;
     try {
@@ -61,18 +154,17 @@ async function verifySmartCache() {
             isSmartCacheValid = true;
         } else {
             isSmartCacheValid = false;
-            localStorage.setItem(`smart_time_${assignedClass}`, serverTime);
+            safeSetCache(`smart_time_${assignedClass}`, serverTime);
         }
     } catch(e) { isSmartCacheValid = false; }
     return isSmartCacheValid;
 }
 
-// 📌 മാറ്റങ്ങൾ വരുത്തുമ്പോൾ Cache അപ്ഡേറ്റ് ചെയ്യാനുള്ള ഫംഗ്ഷൻ
 async function triggerCacheUpdate() {
     try {
         const now = Date.now();
         await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { lastUpdate: now }, { merge: true });
-        localStorage.setItem(`smart_time_${assignedClass}`, now);
+        safeSetCache(`smart_time_${assignedClass}`, now);
         isSmartCacheValid = true; 
     } catch (e) {}
 }
@@ -83,15 +175,12 @@ onAuthStateChanged(auth, async (user) => {
         editModalInstance = new bootstrap.Modal(document.getElementById('editStudentModal'));
         await loadTeacherData();
         setupTabs();
+        setupTransferMarksUI();
         loadPublishSettings(document.getElementById("publishTerm").value);
     }
 });
 
 logoutBtn.addEventListener("click", () => { signOut(auth).then(() => { localStorage.clear(); window.location.href = "index.html"; }); });
-
-function clearCache(keyPrefix) {
-    Object.keys(localStorage).forEach(key => { if(key.startsWith(keyPrefix)) localStorage.removeItem(key); });
-}
 
 function getGrade(percentage, isPassed) {
     if (!isPassed) return "D"; 
@@ -113,14 +202,12 @@ function formatDate(dateStr) {
     return dateStr;
 }
 
-// 📌 Cache വഴി സിങ്ക് ചെയ്ത് Reads കുറയ്ക്കുന്നു
 async function syncResultCache(term) {
     if (!madrasaUid || !assignedClass || !term) return;
     const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
     try {
         const publishSnap = await getDoc(doc(db, "publish_settings", docId));
-        let isPublished = false;
-        let publishDateTime = "";
+        let isPublished = false; let publishDateTime = "";
         if (publishSnap.exists()) {
             isPublished = publishSnap.data().isPublished || false;
             publishDateTime = publishSnap.data().publishDateTime || "";
@@ -128,32 +215,25 @@ async function syncResultCache(term) {
 
         const cacheKey = `cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`;
         let snapData = [];
-        
         if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
             snapData = JSON.parse(localStorage.getItem(cacheKey));
         } else {
             const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
             marksSnap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
-            localStorage.setItem(cacheKey, JSON.stringify(snapData));
+            safeSetCache(cacheKey, JSON.stringify(snapData));
         }
 
-        let marksMap = {};
-        snapData.forEach(data => { marksMap[data.studentId] = data; });
-
+        let marksMap = {}; snapData.forEach(data => { marksMap[data.studentId] = data; });
         let allStudents = Object.values(studentsMap);
         allStudents.sort((a, b) => {
             if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
             return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
         });
         
-        let classResults = [];
-        let boyRoll = 1, girlRoll = 1;
-
+        let classResults = []; let boyRoll = 1, girlRoll = 1;
         allStudents.forEach(st => {
-            let mData = marksMap[st.id];
-            let gen = st.gender || "Male";
+            let mData = marksMap[st.id]; let gen = st.gender || "Male";
             let roll = gen === "Male" ? boyRoll++ : girlRoll++;
-
             if (mData) {
                 classResults.push({
                     rollNo: roll, studentId: st.id, studentName: st.name, admissionNo: st.admissionNo,
@@ -175,12 +255,13 @@ async function loadTeacherData() {
     try {
         let tData;
         const cachedTeacher = localStorage.getItem(`cache_user_${teacherUid}`);
-        if (cachedTeacher) { tData = JSON.parse(cachedTeacher); } 
-        else {
+        if (cachedTeacher) { 
+            try { tData = JSON.parse(cachedTeacher); } catch(e) { localStorage.removeItem(`cache_user_${teacherUid}`); return loadTeacherData(); }
+        } else {
             const teacherDoc = await getDoc(doc(db, "users", teacherUid));
             if (teacherDoc.exists()) {
                 tData = teacherDoc.data();
-                localStorage.setItem(`cache_user_${teacherUid}`, JSON.stringify(tData));
+                safeSetCache(`cache_user_${teacherUid}`, JSON.stringify(tData));
             } else return;
         }
             
@@ -188,27 +269,29 @@ async function loadTeacherData() {
         madrasaUid = tData.madrasaUid;
         teacherNameGlobal = tData.name;
             
-        await verifySmartCache(); // 📌 പ്രധാന ക്യാഷ് പരിശോധന
+        await verifySmartCache(); 
 
         if (isSmartCacheValid && localStorage.getItem(`cache_admin_${madrasaUid}`)) {
-            const adminData = JSON.parse(localStorage.getItem(`cache_admin_${madrasaUid}`));
-            madrasaNameGlobal = adminData.madrasaNameGlobal;
-            customMadrasaId = adminData.customMadrasaId;
+            try {
+                const adminData = JSON.parse(localStorage.getItem(`cache_admin_${madrasaUid}`));
+                madrasaNameGlobal = adminData.madrasaNameGlobal; customMadrasaId = adminData.customMadrasaId;
+            } catch(e) { localStorage.removeItem(`cache_admin_${madrasaUid}`); }
         } else {
             const adminDoc = await getDoc(doc(db, "users", madrasaUid));
             if (adminDoc.exists()) {
                 madrasaNameGlobal = adminDoc.data().madrasaName || "MADRASA";
                 customMadrasaId = adminDoc.data().madrasaId || madrasaUid;
-                localStorage.setItem(`cache_admin_${madrasaUid}`, JSON.stringify({ madrasaNameGlobal, customMadrasaId }));
+                safeSetCache(`cache_admin_${madrasaUid}`, JSON.stringify({ madrasaNameGlobal, customMadrasaId }));
             }
         }
         displayMadrasaName.textContent = madrasaNameGlobal;
         displayClassName.textContent = assignedClass;
 
         if (isSmartCacheValid && localStorage.getItem(`cache_subs_${assignedClass}`)) {
-            const subData = JSON.parse(localStorage.getItem(`cache_subs_${assignedClass}`));
-            classSubjects = subData.subjects;
-            classMuallimName = subData.muallimName;
+            try {
+                const subData = JSON.parse(localStorage.getItem(`cache_subs_${assignedClass}`));
+                classSubjects = subData.subjects; classMuallimName = subData.muallimName;
+            } catch(e) { localStorage.removeItem(`cache_subs_${assignedClass}`); }
         } else {
             let rawSubjects = [];
             const subDoc = await getDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`));
@@ -221,14 +304,22 @@ async function loadTeacherData() {
                 if(typeof sub === 'string') return { name: sub, maxMark: 100, passMark: 35 }; 
                 return sub;
             });
-            localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+            safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
         }
 
-        const savedExamTerm = localStorage.getItem('savedExamTerm');
-        if (savedExamTerm && document.getElementById("examTerm")) document.getElementById("examTerm").value = savedExamTerm;
-            
-        const savedViewTerm = localStorage.getItem('savedViewTerm');
-        if (savedViewTerm && document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = savedViewTerm;
+        // 📌 PULLING EXAM TERM DIRECTLY FROM FIREBASE (NOT LOCAL STORAGE)
+        const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
+        let activeExamTerm = "Monthly Test"; // Default
+        if(metaDoc.exists() && metaDoc.data().currentExamTerm) {
+            activeExamTerm = metaDoc.data().currentExamTerm;
+        }
+
+        // പഴയ ലോക്കൽ സ്റ്റോറേജ് ഡിലീറ്റ് ചെയ്യുന്നു
+        localStorage.removeItem('savedExamTerm');
+        localStorage.removeItem('savedViewTerm');
+
+        if (document.getElementById("examTerm")) document.getElementById("examTerm").value = activeExamTerm;
+        if (document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = activeExamTerm;
             
         const savedPublishTerm = localStorage.getItem('savedPublishTerm');
         if (savedPublishTerm && document.getElementById("publishTerm")) document.getElementById("publishTerm").value = savedPublishTerm;
@@ -253,9 +344,14 @@ function setupTabs() {
     });
 }
 
+// 📌 SAVING EXAM TERM DIRECTLY TO FIREBASE
 if (document.getElementById("examTerm")) {
-    document.getElementById("examTerm").addEventListener("change", (e) => {
-        localStorage.setItem('savedExamTerm', e.target.value);
+    document.getElementById("examTerm").addEventListener("change", async (e) => {
+        const newTerm = e.target.value;
+        try {
+            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
+        } catch(err) { console.error("Could not save term to firebase"); }
+        
         document.getElementById("markStudentSelect").value = "";
         document.getElementById("attendanceInput").value = "";
         document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
@@ -265,15 +361,19 @@ if (document.getElementById("examTerm")) {
 }
 
 if (document.getElementById("viewResultTerm")) {
-    document.getElementById("viewResultTerm").addEventListener("change", (e) => {
-        localStorage.setItem('savedViewTerm', e.target.value);
+    document.getElementById("viewResultTerm").addEventListener("change", async (e) => {
+        const newTerm = e.target.value;
+        try {
+            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
+            if (document.getElementById("examTerm")) document.getElementById("examTerm").value = newTerm;
+        } catch(err) {}
         loadResults();
     });
 }
 
 if (document.getElementById("publishTerm")) {
     document.getElementById("publishTerm").addEventListener("change", (e) => {
-        localStorage.setItem('savedPublishTerm', e.target.value);
+        safeSetCache('savedPublishTerm', e.target.value);
         loadPublishSettings(e.target.value);
     });
 }
@@ -290,7 +390,7 @@ document.getElementById("addSubjectBtn").addEventListener("click", async () => {
     
     try { 
         await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { subjects: classSubjects, madrasaUid, className: assignedClass }, { merge: true }); 
-        localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+        safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
         await triggerCacheUpdate();
         
         document.getElementById("newSubjectName").value = ""; 
@@ -406,7 +506,7 @@ document.getElementById("addStudentBtn").addEventListener("click", async () => {
         
         let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
         students.push({ id: newDocRef.id, ...newStudentData });
-        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
         
         await triggerCacheUpdate();
         
@@ -427,11 +527,13 @@ async function loadStudents() {
     let students = [];
     
     if (isSmartCacheValid && localStorage.getItem(cacheKey)) { 
-        students = JSON.parse(localStorage.getItem(cacheKey)); 
-    } else {
+        try { students = JSON.parse(localStorage.getItem(cacheKey)); } catch(e) { localStorage.removeItem(cacheKey); }
+    } 
+    
+    if (students.length === 0) {
         const snap = await getDocs(query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass)));
         snap.forEach(doc => students.push({ id: doc.id, ...doc.data() }));
-        localStorage.setItem(cacheKey, JSON.stringify(students));
+        safeSetCache(cacheKey, JSON.stringify(students));
     }
 
     studentsMap = {};
@@ -449,9 +551,7 @@ async function loadStudents() {
     document.getElementById("pdfClassTitle4").textContent = `CLASS: ${assignedClass.toUpperCase()} - STUDENTS LIST`;
 
     let boyRoll = 1, girlRoll = 1;
-    let deskLabelsHTML = "";
-    let currentChunk = "";
-    let labelCount = 0;
+    let deskLabelsHTML = ""; let currentChunk = ""; let labelCount = 0;
 
     students.forEach(st => {
         studentsMap[st.id] = st;
@@ -533,10 +633,9 @@ document.getElementById("saveEditStudentBtn").addEventListener("click", async ()
         let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
         const index = students.findIndex(s => s.id === id);
         if(index !== -1) students[index] = { ...students[index], ...updatedData };
-        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
         
         await triggerCacheUpdate();
-        
         editModalInstance.hide();
         await loadStudents();
     } catch (e) { alert("Error updating student"); }
@@ -552,7 +651,7 @@ window.deleteStudent = async (studentId) => {
         
         let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
         students = students.filter(s => s.id !== studentId);
-        localStorage.setItem(`cache_students_${assignedClass}`, JSON.stringify(students));
+        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
         
         localStorage.removeItem(`cache_marks_${assignedClass}_${document.getElementById("viewResultTerm").value.replace(/\s+/g, '')}`);
         isSmartCacheValid = false;
@@ -677,7 +776,7 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         const index = snapData.findIndex(m => m.id === docId);
         if (index !== -1) snapData[index] = { id: docId, ...finalData };
         else snapData.push({ id: docId, ...finalData });
-        localStorage.setItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
+        safeSetCache(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
         
         await triggerCacheUpdate();
         await syncResultCache(term);
@@ -701,8 +800,7 @@ document.getElementById("uploadStudentExcelBtn").addEventListener("click", () =>
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: "array" });
             const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            let count = 0;
-            let skippedCount = 0;
+            let count = 0; let skippedCount = 0;
             
             for (const row of json) {
                 const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
@@ -873,11 +971,13 @@ async function loadResults() {
     let snapData = [];
     
     if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
-        snapData = JSON.parse(localStorage.getItem(cacheKey));
-    } else {
+        try { snapData = JSON.parse(localStorage.getItem(cacheKey)); } catch(e) { localStorage.removeItem(cacheKey); }
+    } 
+    
+    if (snapData.length === 0) {
         const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
         snap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
-        localStorage.setItem(cacheKey, JSON.stringify(snapData));
+        safeSetCache(cacheKey, JSON.stringify(snapData));
     }
     
     let marksMap = {};
@@ -1001,7 +1101,7 @@ window.deleteMark = async (docId, term) => {
     
     let snapData = JSON.parse(localStorage.getItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`) || "[]");
     snapData = snapData.filter(m => m.id !== docId);
-    localStorage.setItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
+    safeSetCache(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
     
     await triggerCacheUpdate();
     await syncResultCache(term);
@@ -1146,7 +1246,7 @@ document.getElementById("downloadDetailedPdfBtn").addEventListener("click", asyn
         
         try {
             await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { muallimName: finalName }, { merge: true });
-            localStorage.setItem(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+            safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
             await triggerCacheUpdate();
         } catch(e) {}
         
