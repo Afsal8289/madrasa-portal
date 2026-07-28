@@ -29,6 +29,7 @@ let studentsMap = {};
 let editModalInstance = null;
 let classMuallimName = ""; 
 let isSmartCacheValid = false; 
+let isEditModeActive = false; // 📌 എഡിറ്റ് വഴി വന്നതാണോ എന്ന് തിരിച്ചറിയാനുള്ള പുതിയ സംവിധാനം
 
 const displayMadrasaName = document.getElementById("displayMadrasaName");
 const displayClassName = document.getElementById("displayClassName");
@@ -335,7 +336,11 @@ function setupTabs() {
             const target = e.target.getAttribute("data-tab");
             e.target.classList.add("active");
             document.getElementById(target).classList.add("active");
+            
             if(target === "tab-results") loadResults();
+            
+            // 📌 സാധാരണ നിലയിൽ Enter Marks ടാബിൽ ക്ലിക്ക് ചെയ്താൽ Edit Mode ഓഫ് ആകും
+            if(target === "tab-marks") isEditModeActive = false; 
         });
     });
 }
@@ -713,7 +718,6 @@ document.getElementById("markStudentSelect").addEventListener("change", async (e
     }
 });
 
-// 📌 ഇവിടെയാണ് മാറ്റം വരുത്തിയിട്ടുള്ളത് (Switch back to Results Tab)
 document.getElementById("saveMarksBtn").addEventListener("click", async () => {
     const select = document.getElementById("markStudentSelect"); const studentId = select.value;
     if (!studentId) return alert("Select a student");
@@ -782,16 +786,20 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         if(forcePromoteCheck) forcePromoteCheck.checked = false;
         loadResults();
 
-        // 📌 സ്ക്രീൻ ഓട്ടോമാറ്റിക് ആയി Results ടാബിലേക്ക് മാറാനുള്ള കോഡ്
-        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-        
-        const resultsTabBtn = document.querySelector('[data-tab="tab-results"]');
-        const resultsTabContent = document.getElementById("tab-results");
-        
-        if (resultsTabBtn) resultsTabBtn.classList.add("active");
-        if (resultsTabContent) resultsTabContent.classList.add("active");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // 📌 എഡിറ്റ് വഴി വന്നതാണെങ്കിൽ മാത്രം തിരികെ പോകുക
+        if (isEditModeActive) {
+            document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+            
+            const resultsTabBtn = document.querySelector('[data-tab="tab-results"]');
+            const resultsTabContent = document.getElementById("tab-results");
+            
+            if (resultsTabBtn) resultsTabBtn.classList.add("active");
+            if (resultsTabContent) resultsTabContent.classList.add("active");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            isEditModeActive = false; // ഒരു തവണ തിരികെ എത്തിയ ശേഷം ഫ്ലാഗ് ഓഫ് ചെയ്യുന്നു
+        }
 
     } catch (e) {}
     document.getElementById("saveMarksBtn").textContent = "Save Marks";
@@ -1107,7 +1115,10 @@ async function loadResults() {
     }
 }
 
+// 📌 എഡിറ്റ് ബട്ടൺ ക്ലിക്ക് ചെയ്യുമ്പോൾ ഈ ഫംഗ്ഷൻ വഴി പുതിയ ഫ്ലാഗ് On ആകും
 window.editMark = (studentId, term) => {
+    isEditModeActive = true; 
+    
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
     
