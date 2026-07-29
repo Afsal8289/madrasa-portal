@@ -29,7 +29,7 @@ let studentsMap = {};
 let editModalInstance = null;
 let classMuallimName = ""; 
 let isSmartCacheValid = false; 
-let isEditModeActive = false; // 📌 എഡിറ്റ് വഴി വന്നതാണോ എന്ന് തിരിച്ചറിയാനുള്ള പുതിയ സംവിധാനം
+let isEditModeActive = false;
 
 const displayMadrasaName = document.getElementById("displayMadrasaName");
 const displayClassName = document.getElementById("displayClassName");
@@ -59,7 +59,7 @@ syncBtn.onclick = async () => {
 logoutBtn.parentNode.insertBefore(syncBtn, logoutBtn);
 
 
-// 📌 തെറ്റായ എക്സാമിൽ ചേർത്ത മാർക്കുകൾ മാറ്റാനുള്ള (Transfer Marks) പുതിയ UI
+// 📌 തെറ്റായ എക്സാമിൽ ചേർത്ത മാർക്കുകൾ മാറ്റാനുള്ള (Transfer Marks) UI
 function setupTransferMarksUI() {
     const actionArea = document.getElementById("deleteAllMarksTermBtn");
     if (!actionArea || document.getElementById("transferMarksContainer")) return;
@@ -229,6 +229,25 @@ async function syncResultCache(term) {
             return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
         });
         
+        // 📌 പബ്ലിക് റിസൾട്ടിലും ശരിയായ റാങ്ക് വരാൻ വേണ്ടിയുള്ള മാറ്റം
+        let tempValidMarks = [];
+        allStudents.forEach(st => {
+            if (marksMap[st.id]) tempValidMarks.push(marksMap[st.id]);
+        });
+        
+        tempValidMarks.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
+        let cRank = 1, pMark = null;
+        tempValidMarks.forEach(r => {
+            if (r.status === "Failed" || r.totalMarks === "" || r.totalMarks === undefined) {
+                r.calculatedRank = "";
+            } else {
+                if (pMark === null) { r.calculatedRank = cRank; }
+                else if (Number(r.totalMarks) === Number(pMark)) { r.calculatedRank = cRank; } // ഒരേ മാർക്കിന് ഒരേ റാങ്ക്
+                else { cRank++; r.calculatedRank = cRank; } // വ്യത്യസ്ത മാർക്കിന് അടുത്ത റാങ്ക്
+                pMark = r.totalMarks;
+            }
+        });
+
         let classResults = []; let boyRoll = 1, girlRoll = 1;
         allStudents.forEach(st => {
             let mData = marksMap[st.id]; let gen = st.gender || "Male";
@@ -238,7 +257,9 @@ async function syncResultCache(term) {
                     rollNo: roll, studentId: st.id, studentName: st.name, admissionNo: st.admissionNo,
                     gender: gen, className: assignedClass, marks: mData.marks, attendance: mData.attendance,
                     totalMarks: mData.totalMarks, maxMarkTotal: mData.maxMarkTotal, percentage: mData.percentage,
-                    grade: mData.grade, status: mData.status, rank: mData.rank || "", subjectConfig: mData.subjectConfig
+                    grade: mData.grade, status: mData.status, 
+                    rank: mData.calculatedRank || "", // ശരിയായ റാങ്ക് സേവ് ചെയ്യുന്നു
+                    subjectConfig: mData.subjectConfig
                 });
             }
         });
@@ -307,7 +328,7 @@ async function loadTeacherData() {
         }
 
         const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
-        let activeExamTerm = "Monthly Test"; // Default
+        let activeExamTerm = "Monthly Test"; 
         if(metaDoc.exists() && metaDoc.data().currentExamTerm) {
             activeExamTerm = metaDoc.data().currentExamTerm;
         }
@@ -338,8 +359,6 @@ function setupTabs() {
             document.getElementById(target).classList.add("active");
             
             if(target === "tab-results") loadResults();
-            
-            // 📌 സാധാരണ നിലയിൽ Enter Marks ടാബിൽ ക്ലിക്ക് ചെയ്താൽ Edit Mode ഓഫ് ആകും
             if(target === "tab-marks") isEditModeActive = false; 
         });
     });
@@ -350,7 +369,7 @@ if (document.getElementById("examTerm")) {
         const newTerm = e.target.value;
         try {
             await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
-        } catch(err) { console.error("Could not save term to firebase"); }
+        } catch(err) {}
         
         document.getElementById("markStudentSelect").value = "";
         document.getElementById("attendanceInput").value = "";
@@ -786,7 +805,6 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
         if(forcePromoteCheck) forcePromoteCheck.checked = false;
         loadResults();
 
-        // 📌 എഡിറ്റ് വഴി വന്നതാണെങ്കിൽ മാത്രം തിരികെ പോകുക
         if (isEditModeActive) {
             document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
             document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
@@ -798,7 +816,7 @@ document.getElementById("saveMarksBtn").addEventListener("click", async () => {
             if (resultsTabContent) resultsTabContent.classList.add("active");
             window.scrollTo({ top: 0, behavior: 'smooth' });
             
-            isEditModeActive = false; // ഒരു തവണ തിരികെ എത്തിയ ശേഷം ഫ്ലാഗ് ഓഫ് ചെയ്യുന്നു
+            isEditModeActive = false; 
         }
 
     } catch (e) {}
@@ -1017,13 +1035,28 @@ async function loadResults() {
         return;
     }
     
+    // 📌 ടീച്ചർ ഡാഷ്ബോർഡിലെ ടേബിളിൽ ശരിയായ റാങ്ക് വരാൻ വേണ്ടിയുള്ള മാറ്റം
     results.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
-    let rank = 1; let hasMarks = false;
+    let currentRank = 1; 
+    let previousMark = null; 
+    let hasMarks = false;
 
     results.forEach(r => {
         if (!r.isPlaceholder && r.totalMarks !== undefined && r.totalMarks !== "") { hasMarks = true; }
-        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") { r.rank = ""; } 
-        else { r.rank = rank++; }
+        
+        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") { 
+            r.rank = ""; 
+        } else {
+            if (previousMark === null) {
+                r.rank = currentRank;
+            } else if (Number(r.totalMarks) === Number(previousMark)) {
+                r.rank = currentRank; // ഒരേ മാർക്കിന് ഒരേ റാങ്ക്
+            } else {
+                currentRank++; // വ്യത്യസ്ത മാർക്കിന് അടുത്ത റാങ്ക്
+                r.rank = currentRank;
+            }
+            previousMark = r.totalMarks;
+        }
     });
     
     results.sort((a, b) => {
@@ -1115,7 +1148,6 @@ async function loadResults() {
     }
 }
 
-// 📌 എഡിറ്റ് ബട്ടൺ ക്ലിക്ക് ചെയ്യുമ്പോൾ ഈ ഫംഗ്ഷൻ വഴി പുതിയ ഫ്ലാഗ് On ആകും
 window.editMark = (studentId, term) => {
     isEditModeActive = true; 
     
