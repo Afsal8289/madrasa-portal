@@ -1015,6 +1015,87 @@ document.getElementById("downloadDeskLabelsBtn")?.addEventListener("click", () =
     generatePDF("pdfDeskLabelsArea", `Class_${state.assignedClass}_${term}_DeskLabels.pdf`, 'p');
 });
 
+// 🛠️ റിസൾട്ട് പബ്ലിഷ് ചെയ്യാനുള്ള ഫംഗ്ഷൻ (ഇവിടെ നിന്നും കോപ്പി ചെയ്യുക)
+document.getElementById("savePublishSettingsBtn")?.addEventListener("click", async () => {
+    const term = document.getElementById("publishTerm").value;
+    const publishDateTime = document.getElementById("publishDateTime").value;
+    const status = document.getElementById("publishStatus").value;
+    const isPublished = (status === "published");
+    
+    if (!term) return alert("Please select a term.");
+    
+    const btn = document.getElementById("savePublishSettingsBtn");
+    const originalText = btn.textContent;
+    btn.textContent = "Saving & Syncing...";
+    btn.disabled = true;
+    
+    try {
+        const docId = `${state.madrasaUid}_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
+        
+        // 1. സെറ്റിംഗ്സ് ഡാറ്റാബേസിൽ സേവ് ചെയ്യുന്നു
+        await setDoc(doc(db, "publish_settings", docId), {
+            isPublished: isPublished,
+            publishDateTime: publishDateTime,
+            term: term,
+            className: state.assignedClass,
+            madrasaUid: state.madrasaUid,
+            updatedAt: new Date().toISOString()
+        });
+        
+        const statusText = document.getElementById("publishStatusText");
+        if (statusText) {
+            statusText.innerHTML = "Syncing cache to database... Please wait.";
+            statusText.style.color = "#f59e0b";
+        }
+        
+        // 2. പബ്ലിക് റിസൾട്ട് പേജിലേക്ക് ഡാറ്റ സിങ്ക് ചെയ്യുന്നു (Auto-Cache)
+        await syncResultCache(term);
+        
+        if (statusText) {
+            statusText.innerHTML = isPublished 
+                ? `✅ Results for '${term}' are now PUBLISHED & VISIBLE!` 
+                : `🔒 Results for '${term}' are now HIDDEN!`;
+            statusText.style.color = isPublished ? "#10b981" : "#ef4444";
+        }
+        
+        alert(`Publish settings for ${term} updated successfully!`);
+        
+    } catch (error) {
+        console.error("Publish Error:", error);
+        alert("Failed to save publish settings. Please try again.");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+});
+
+// ഡ്രോപ്പ് ഡൗണിൽ നിന്ന് എക്സാം മാറുമ്പോൾ പഴയ സ്റ്റാറ്റസ് ലോഡ് ചെയ്യാനുള്ള ഫംഗ്ഷൻ
+document.getElementById("publishTerm")?.addEventListener("change", async (e) => {
+    const term = e.target.value;
+    if(!term) return;
+    
+    try {
+        const docId = `${state.madrasaUid}_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
+        const snap = await getDoc(doc(db, "publish_settings", docId));
+        
+        if (snap.exists()) {
+            const data = snap.data();
+            document.getElementById("publishStatus").value = data.isPublished ? "published" : "hidden";
+            document.getElementById("publishDateTime").value = data.publishDateTime || "";
+        } else {
+            document.getElementById("publishStatus").value = "hidden";
+            document.getElementById("publishDateTime").value = "";
+        }
+        
+        const statusText = document.getElementById("publishStatusText");
+        if(statusText) statusText.innerHTML = "";
+        
+    } catch(err) {
+        console.error(err);
+    }
+});
+// 🛠️ പബ്ലിഷ് കോഡ് ഇവിടെ അവസാനിക്കുന്നു
+
 // START APPLICATION
 checkAuth(async (user) => {
     state.teacherUid = user.uid;
