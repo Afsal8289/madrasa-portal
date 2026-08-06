@@ -302,8 +302,8 @@
   let madrasaIdFromUrl = urlParams.get('madrasa') || urlParams.get('mid');
   let actualAdminUid = null;
   let currentRollNo = "";
-
-  // 🛠️ ഫിക്സ് 2: ലിങ്കിൽ term ഉണ്ടെങ്കിൽ അത് തനിയെ സെലക്ട് ചെയ്യുന്നു
+ 
+  // 🛠️ ഫിക്സ് 2: ലിങ്കിൽ term ഉണ്ടെങ്കിൽ അത് തനിയെ സെലക്ട് ചെയ്യുകയും, ആ ബോക്സ് സ്ക്രീനിൽ നിന്ന് മറയ്ക്കുകയും ചെയ്യുന്നു
   const termFromUrl = urlParams.get('term');
   if (termFromUrl) {
       const termSelect = document.getElementById("examTerm");
@@ -312,6 +312,8 @@
               termSelect.value = opt.value;
           }
       });
+      // ഈ കോഡ് Exam Term സെലക്ട് ചെയ്യുന്ന ബോക്സ് പൂർണ്ണമായും ഹൈഡ് ചെയ്യും
+      termSelect.closest('.input-group').style.display = 'none';
   }
 
   if (madrasaIdFromUrl) {
