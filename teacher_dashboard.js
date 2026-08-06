@@ -1103,3 +1103,68 @@ checkAuth(async (user) => {
     setupTabs();
     await loadTeacherData();
 });
+
+// 🛠️ UPGRADE STUDENTS LOGIC (കാഷെ ക്ലിയർ ചെയ്യുന്ന പ്രശ്നം പരിഹരിച്ചത്)
+
+// 1. "Select All" ചെക്ക്ബോക്സ് വർക്ക് ചെയ്യാൻ
+document.getElementById("selectAllUpgrade")?.addEventListener("change", (e) => {
+    const isChecked = e.target.checked;
+    const allBoxes = document.querySelectorAll('#upgradeTableBody input[type="checkbox"]');
+    allBoxes.forEach(box => box.checked = isChecked);
+});
+
+// 2. Upgrade ബട്ടൺ ക്ലിക്ക് ചെയ്യുമ്പോൾ ഉള്ള പ്രവർത്തനം
+document.getElementById("processUpgradeBtn")?.addEventListener("click", async () => {
+    const targetClass = document.getElementById("upgradeTargetClass").value;
+    if (!targetClass) {
+        return alert("Please select a target class to upgrade.");
+    }
+
+    const checkboxes = document.querySelectorAll('#upgradeTableBody input[type="checkbox"]:checked');
+    
+    if (checkboxes.length === 0) {
+        return alert("Please select at least one student to upgrade.");
+    }
+
+    if (!confirm(`Are you sure you want to upgrade ${checkboxes.length} student(s) to Class ${targetClass}?`)) {
+        return;
+    }
+
+    const btn = document.getElementById("processUpgradeBtn");
+    const originalText = btn.textContent;
+    btn.textContent = "Upgrading Please Wait...";
+    btn.disabled = true;
+
+    try {
+        let count = 0;
+        let currentBatch = writeBatch(db); // കൂടുതൽ വേഗത്തിൽ ഡാറ്റ മാറ്റാൻ ബാച്ച് ഉപയോഗിക്കുന്നു
+
+        for (let box of checkboxes) {
+            const studentDocId = box.value;
+            if(studentDocId) {
+                const studentRef = doc(db, "students", studentDocId); 
+                currentBatch.set(studentRef, { className: targetClass }, { merge: true });
+                count++;
+            }
+        }
+        
+        await currentBatch.commit();
+        
+        // 🛠️ പരിഹാരം: നിലവിലെ ക്ലാസ്സിലെ കാഷെ (Cache) ക്ലിയർ ചെയ്യുന്നു
+        localStorage.removeItem(`cache_students_${state.assignedClass}`);
+        state.isSmartCacheValid = false;
+        await triggerCacheUpdate(); // ബാക്ക്ഗ്രൗണ്ടിൽ സിസ്റ്റം അപ്ഡേറ്റ് ചെയ്യുന്നു
+        
+        alert(`Successfully upgraded ${count} student(s) to Class ${targetClass}!`);
+        
+        // മാറ്റങ്ങൾ ഉടനടി സ്ക്രീനിൽ കാണാൻ പേജ് റീലോഡ് ചെയ്യുന്നു
+        window.location.reload(); 
+        
+    } catch (error) {
+        console.error("Upgrade Error:", error);
+        alert("An error occurred while upgrading. Please check the console.");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+});
