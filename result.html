@@ -298,9 +298,21 @@
   const db = getFirestore(app);
 
   const urlParams = new URLSearchParams(window.location.search);
-  let madrasaIdFromUrl = urlParams.get('mid');
+  // 🛠️ ഫിക്സ് 1: ലിങ്കിലെ 'madrasa' എന്ന പാരാമീറ്റർ കൃത്യമായി എടുക്കുന്നു
+  let madrasaIdFromUrl = urlParams.get('madrasa') || urlParams.get('mid');
   let actualAdminUid = null;
   let currentRollNo = "";
+
+  // 🛠️ ഫിക്സ് 2: ലിങ്കിൽ term ഉണ്ടെങ്കിൽ അത് തനിയെ സെലക്ട് ചെയ്യുന്നു
+  const termFromUrl = urlParams.get('term');
+  if (termFromUrl) {
+      const termSelect = document.getElementById("examTerm");
+      Array.from(termSelect.options).forEach(opt => {
+          if (opt.value.replace(/\s+/g, '') === termFromUrl) {
+              termSelect.value = opt.value;
+          }
+      });
+  }
 
   if (madrasaIdFromUrl) {
       verifyAndLoadMadrasa(madrasaIdFromUrl);
@@ -308,7 +320,6 @@
       document.getElementById("invalidLinkMsg").style.display = "block";
   }
 
-  // UI പോപ്പുലേറ്റ് ചെയ്യാനുള്ള ഹെൽപ്പർ ഫങ്ക്ഷൻ (പുതിയത്)
   function applyMadrasaDataToUI(data) {
       const formWrapper = document.getElementById("searchCard");
       const invalidMsg = document.getElementById("invalidLinkMsg");
@@ -338,7 +349,6 @@
         const formWrapper = document.getElementById("searchCard");
         const invalidMsg = document.getElementById("invalidLinkMsg");
 
-        // 📌 SMART CACHE: മദ്രസയുടെ ഡാറ്റ ബ്രൗസറിൽ നിന്ന് എടുക്കുന്നു (0 Reads)
         const madrasaCacheKey = `madrasa_info_${mid}`;
         const cachedMadrasa = sessionStorage.getItem(madrasaCacheKey);
 
@@ -381,15 +391,12 @@
 
         if (actualAdminUid && adminDocSnap) {
             const docData = adminDocSnap.data();
-            
-            // 📌 SMART CACHE: മദ്രസയുടെ ഡാറ്റ ബ്രൗസറിൽ സേവ് ചെയ്യുന്നു
             const dataToCache = {
                 uid: actualAdminUid,
                 madrasaName: docData.madrasaName,
                 classes: docData.classes
             };
             sessionStorage.setItem(madrasaCacheKey, JSON.stringify(dataToCache));
-            
             applyMadrasaDataToUI(dataToCache);
         } else {
             formWrapper.style.display = "none";
@@ -427,56 +434,53 @@
       btn.disabled = true;
 
       try {
-          const docId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
-          const localCacheKey = `resultData_${docId}`; 
+          // 🛠️ ഫിക്സ് 3: ഡാഷ്ബോർഡ് സേവ് ചെയ്ത അതേ ഡാറ്റാബേസിൽ നിന്നും ഡാറ്റ എടുക്കുന്നു
+          const metaDocId = `${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}`;
+          const metaSnap = await getDoc(doc(db, "result_meta", metaDocId));
 
-          let classResults = [];
-          let usedLocalCache = false;
-          
-          const cachedString = sessionStorage.getItem(localCacheKey);
-
-          // 📌 SMART CACHE: റിസൾട്ട് ബ്രൗസറിൽ സേവ് ചെയ്തിട്ടുണ്ടെങ്കിൽ അത് എടുക്കുന്നു
-          if (cachedString) {
-              classResults = JSON.parse(cachedString);
-              usedLocalCache = true;
-          } else {
-              // ഇല്ലെങ്കിൽ ഫയർബേസിൽ നിന്ന് 1-Read വഴി എടുക്കുന്നു
-              const cacheSnap = await getDoc(doc(db, "result_cache", docId));
-
-              if (!cacheSnap.exists()) {
-                  document.getElementById("searchCard").style.display = "none";
-                  document.getElementById("comingSoonCard").style.display = "block";
-                  resetBtn(btn);
-                  return;
-              }
-
-              const cacheData = cacheSnap.data();
-              let isPublished = cacheData.isPublished;
-              if (isPublished && cacheData.publishDateTime && new Date(cacheData.publishDateTime) > new Date()) {
-                  isPublished = false;
-              }
-
-              if (!isPublished) {
-                  document.getElementById("searchCard").style.display = "none";
-                  document.getElementById("comingSoonCard").style.display = "block";
-                  resetBtn(btn);
-                  return;
-              }
-
-              classResults = JSON.parse(cacheData.resultsData || "[]");
-              sessionStorage.setItem(localCacheKey, JSON.stringify(classResults));
+          // പബ്ലിഷ് ചെയ്തിട്ടുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+          if (!metaSnap.exists()) {
+              document.getElementById("searchCard").style.display = "none";
+              document.getElementById("comingSoonCard").style.display = "block";
+              resetBtn(btn);
+              return;
           }
-          
-          let targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
 
-          // ഫോണിലെ സേവ് ആയ ഡാറ്റയിൽ കുട്ടിയെ കണ്ടില്ലെങ്കിൽ ഒന്നുകൂടി ഫയർബേസിൽ പോയി നോക്കും
-          if (!targetStudent && usedLocalCache) {
-              const cacheSnap = await getDoc(doc(db, "result_cache", docId));
-              if (cacheSnap.exists()) {
-                  const cacheData = cacheSnap.data();
-                  classResults = JSON.parse(cacheData.resultsData || "[]");
-                  sessionStorage.setItem(localCacheKey, JSON.stringify(classResults)); 
-                  targetStudent = classResults.find(s => s.gender === gender && s.rollNo === rollNo);
+          const metaData = metaSnap.data();
+          let isPublished = metaData.isPublished;
+          
+          if (isPublished && metaData.publishDateTime && new Date(metaData.publishDateTime) > new Date()) {
+              isPublished = false;
+          }
+
+          if (!isPublished) {
+              document.getElementById("searchCard").style.display = "none";
+              document.getElementById("comingSoonCard").style.display = "block";
+              resetBtn(btn);
+              return;
+          }
+
+          // കുട്ടിയുടെ റിസൾട്ട് എടുക്കുന്നു (Smart Cached)
+          const studentCacheKey = `res_${actualAdminUid}_${cls}_${term.replace(/\s+/g, '')}_${gender}_${rollNo}`;
+          let targetStudent = null;
+          
+          const cachedString = sessionStorage.getItem(studentCacheKey);
+          if (cachedString) {
+              targetStudent = JSON.parse(cachedString);
+          } else {
+              const q = query(
+                  collection(db, "public_results"),
+                  where("madrasaUid", "==", actualAdminUid),
+                  where("className", "==", cls),
+                  where("term", "==", term),
+                  where("gender", "==", gender),
+                  where("rollNo", "==", rollNo)
+              );
+              const querySnapshot = await getDocs(q);
+              
+              if (!querySnapshot.empty) {
+                  targetStudent = querySnapshot.docs[0].data();
+                  sessionStorage.setItem(studentCacheKey, JSON.stringify(targetStudent));
               }
           }
 

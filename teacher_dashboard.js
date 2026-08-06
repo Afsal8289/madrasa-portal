@@ -1,209 +1,435 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, addDoc, getDocs, query, where, deleteDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { db } from './firebase_core.js';
+import { utils, network } from './utils.js';
+import { checkAuth, logoutUser } from './auth.js';
+import { generatePDF } from './pdf.js';
+import { StudentService } from './students.js';
+import { MarkService } from './marks.js';
+import { doc, getDoc, collection, getDocs, query, where, setDoc, updateDoc, onSnapshot, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyDr5gIKnAdkiNrdLe2e3u1wOChFzeXlpCA",
-    authDomain: "madrasa-portal-63037.firebaseapp.com",
-    projectId: "madrasa-portal-63037",
-    storageBucket: "madrasa-portal-63037.firebasestorage.app",
-    messagingSenderId: "543466628748",
-    appId: "1:543466628748:web:6ec6375aa7d080cb403da9"
+// Global State
+let state = {
+    teacherUid: "",
+    assignedClass: "",
+    madrasaUid: "",
+    madrasaNameGlobal: "MADRASA",
+    teacherNameGlobal: "TEACHER",
+    customMadrasaId: "",
+    classSubjects: [],
+    studentsMap: {},
+    classMuallimName: "",
+    isSmartCacheValid: false,
+    isEditModeActive: false
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-const userRole = localStorage.getItem('userRole');
-if (userRole !== 'teacher') { alert("Unauthorized Access!"); window.location.href = "index.html"; }
-
-let teacherUid = "";
-let assignedClass = "";
-let madrasaUid = "";
-let madrasaNameGlobal = "MADRASA";
-let teacherNameGlobal = "TEACHER";
-let customMadrasaId = "";
-let classSubjects = [];
-let studentsMap = {};
 let editModalInstance = null;
-let classMuallimName = ""; 
-let isSmartCacheValid = false; 
-let isEditModeActive = false;
+let unsubscribeMeta = null;
 
-const displayMadrasaName = document.getElementById("displayMadrasaName");
-const displayClassName = document.getElementById("displayClassName");
-const logoutBtn = document.getElementById("logoutBtn");
+const DOM = {
+    madrasaName: document.getElementById("displayMadrasaName"),
+    className: document.getElementById("displayClassName"),
+    logoutBtn: document.getElementById("logoutBtn")
+};
 
-function safeSetCache(key, value) {
-    try { localStorage.setItem(key, value); } 
-    catch (e) { console.warn("Cache issue"); localStorage.removeItem(key); }
+DOM.logoutBtn.addEventListener("click", logoutUser);
+
+function calculateRanks(resultsArray) {
+    let sorted = [...resultsArray].sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
+    let currentRank = 1, previousMark = null;
+    
+    sorted.forEach(r => {
+        if (r.isPlaceholder || r.status === "Failed" || !r.totalMarks) {
+            r.rank = "";
+            r.calculatedRank = "";
+        } else {
+            if (previousMark !== null && Number(r.totalMarks) !== Number(previousMark)) { currentRank++; }
+            r.rank = currentRank;
+            r.calculatedRank = currentRank;
+            previousMark = r.totalMarks;
+        }
+    });
+    return sorted;
 }
 
-const syncBtn = document.createElement("button");
-syncBtn.innerHTML = "🔄 Sync Data";
-syncBtn.className = "btn-custom btn-small";
-syncBtn.style = "background: #27ae60; color: white; margin-right: 15px; font-weight: bold;";
-syncBtn.onclick = async () => {
-    syncBtn.textContent = "Syncing...";
-    const currentTerm = document.getElementById("viewResultTerm").value.replace(/\s+/g, '');
-    localStorage.removeItem(`smart_time_${assignedClass}`);
-    localStorage.removeItem(`cache_students_${assignedClass}`);
-    localStorage.removeItem(`cache_subs_${assignedClass}`);
-    localStorage.removeItem(`cache_marks_${assignedClass}_${currentTerm}`);
-    isSmartCacheValid = false;
-    await loadTeacherData();
-    syncBtn.innerHTML = "🔄 Sync Data";
-    alert("പുതിയ മാറ്റങ്ങൾ മാത്രം വിജയകരമായി അപ്ഡേറ്റ് ചെയ്തു!");
-};
-logoutBtn.parentNode.insertBefore(syncBtn, logoutBtn);
-
-
-// 📌 തെറ്റായ എക്സാമിൽ ചേർത്ത മാർക്കുകൾ മാറ്റാനുള്ള (Transfer Marks) UI
-function setupTransferMarksUI() {
-    const actionArea = document.getElementById("deleteAllMarksTermBtn");
-    if (!actionArea || document.getElementById("transferMarksContainer")) return;
-
-    const transferDiv = document.createElement("div");
-    transferDiv.id = "transferMarksContainer";
-    transferDiv.innerHTML = `
-        <div style="background:#fff3cd; border:1px solid #ffe69c; padding:15px; border-radius:8px; margin-top:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <h6 style="color:#856404; margin-top:0; margin-bottom:12px; font-weight:bold; font-size:14px;"><i class="fas fa-exchange-alt"></i> തെറ്റായ എക്സാമിൽ നൽകിയ മാർക്കുകൾ മാറ്റാൻ (Transfer Marks)</h6>
-            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <select id="transferFromTerm" class="form-control" style="flex:1; min-width:130px;">
-                    <option value="">From (മാറ്റേണ്ടത്)</option>
-                    <option value="Monthly Test">Monthly Test</option>
-                    <option value="Quarterly Exam">Quarterly Exam</option>
-                    <option value="Half Yearly Exam">Half Yearly Exam</option>
-                    <option value="Annual Exam">Annual Exam</option>
-                </select>
-                <i class="fas fa-arrow-right" style="color:#856404;"></i>
-                <select id="transferToTerm" class="form-control" style="flex:1; min-width:130px;">
-                    <option value="">To (ശരിയായത്)</option>
-                    <option value="Monthly Test">Monthly Test</option>
-                    <option value="Quarterly Exam">Quarterly Exam</option>
-                    <option value="Half Yearly Exam">Half Yearly Exam</option>
-                    <option value="Annual Exam">Annual Exam</option>
-                </select>
-                <button id="processTransferBtn" class="btn-custom btn-warning-custom btn-small" style="font-weight:bold;">Move Marks</button>
-            </div>
-        </div>
-    `;
-    actionArea.parentElement.appendChild(transferDiv);
-
-    document.getElementById("processTransferBtn").addEventListener("click", async () => {
-        const fromTerm = document.getElementById("transferFromTerm").value;
-        const toTerm = document.getElementById("transferToTerm").value;
-        
-        if(!fromTerm || !toTerm) return alert("ദയവായി രണ്ട് എക്സാമുകളും സെലക്ട് ചെയ്യുക.");
-        if(fromTerm === toTerm) return alert("രണ്ടും ഒരേ എക്സാം ആണ്. മാറ്റാൻ സാധിക്കില്ല.");
-        if(!confirm(`തീർച്ചയാണോ? '${fromTerm}' -ലെ എല്ലാ മാർക്കുകളും പൂർണ്ണമായും '${toTerm}' ലേക്ക് മാറ്റുകയാണോ?`)) return;
-        
-        const btn = document.getElementById("processTransferBtn");
-        btn.textContent = "Moving..."; btn.disabled = true;
-        
-        try {
-            const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", fromTerm)));
-            if(snap.empty) {
-                alert(`'${fromTerm}' ൽ മാറ്റാൻ മാർക്കുകൾ ഒന്നും കണ്ടെത്തിയില്ല.`);
-                btn.textContent = "Move Marks"; btn.disabled = false; return;
+function setupRealtimeSync() {
+    if (!state.madrasaUid || !state.assignedClass) return;
+    if (unsubscribeMeta) unsubscribeMeta(); 
+    
+    const metaRef = doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`);
+    unsubscribeMeta = onSnapshot(metaRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const serverTime = docSnap.data().lastUpdate || 0;
+            const localTime = utils.safeGetCache(`smart_time_${state.assignedClass}`);
+            
+            if (serverTime > 0 && String(serverTime) !== String(localTime)) {
+                utils.safeSetCache(`smart_time_${state.assignedClass}`, serverTime);
+                state.isSmartCacheValid = true;
+                loadStudents(true); 
+                loadResults(true);
             }
-            
-            const batchPromises = [];
-            snap.docs.forEach(mDoc => {
-                const data = mDoc.data();
-                const newDocId = `${data.studentId}_${toTerm.replace(/\s+/g, '')}`;
-                data.term = toTerm; 
-                batchPromises.push(setDoc(doc(db, "marks", newDocId), data)); 
-                batchPromises.push(deleteDoc(doc(db, "marks", mDoc.id))); 
-            });
-            
-            await Promise.all(batchPromises);
-            
-            localStorage.removeItem(`cache_marks_${assignedClass}_${fromTerm.replace(/\s+/g, '')}`);
-            localStorage.removeItem(`cache_marks_${assignedClass}_${toTerm.replace(/\s+/g, '')}`);
-            isSmartCacheValid = false;
-            await triggerCacheUpdate();
-            await syncResultCache(fromTerm);
-            await syncResultCache(toTerm);
-            
-            alert(`വിജയകരം! ${snap.size} കുട്ടികളുടെ മാർക്കുകൾ '${fromTerm}' ൽ നിന്നും '${toTerm}' ലേക്ക് മാറ്റി.`);
-            
-            if(document.getElementById("examTerm")) document.getElementById("examTerm").value = toTerm;
-            if(document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = toTerm;
-            
-            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: toTerm }, { merge: true });
-            
-            loadResults();
-        } catch(e) { console.error(e); alert("Error moving marks."); }
-        
-        btn.textContent = "Move Marks"; btn.disabled = false;
+        }
     });
 }
 
-
 async function verifySmartCache() {
-    if(!madrasaUid || !assignedClass) return false;
+    if(!state.madrasaUid || !state.assignedClass) return false;
     try {
-        const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
+        const metaDoc = await network.withRetry(() => getDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`)));
         const serverTime = metaDoc.exists() ? metaDoc.data().lastUpdate : 0;
-        const localTime = localStorage.getItem(`smart_time_${assignedClass}`);
-
-        if (serverTime > 0 && String(serverTime) === String(localTime)) {
-            isSmartCacheValid = true;
-        } else {
-            isSmartCacheValid = false;
-            safeSetCache(`smart_time_${assignedClass}`, serverTime);
-        }
-    } catch(e) { isSmartCacheValid = false; }
-    return isSmartCacheValid;
+        const localTime = utils.safeGetCache(`smart_time_${state.assignedClass}`);
+        
+        state.isSmartCacheValid = (serverTime > 0 && String(serverTime) === String(localTime));
+        if (!state.isSmartCacheValid) utils.safeSetCache(`smart_time_${state.assignedClass}`, serverTime);
+    } catch(e) { state.isSmartCacheValid = false; }
+    return state.isSmartCacheValid;
 }
 
 async function triggerCacheUpdate() {
     try {
         const now = Date.now();
-        await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { lastUpdate: now }, { merge: true });
-        safeSetCache(`smart_time_${assignedClass}`, now);
-        isSmartCacheValid = true; 
-    } catch (e) {}
+        await network.withRetry(() => setDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`), { lastUpdate: now }, { merge: true }));
+        utils.safeSetCache(`smart_time_${state.assignedClass}`, now);
+        state.isSmartCacheValid = true; 
+    } catch (e) { console.warn("Cache trigger failed."); }
 }
 
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        teacherUid = user.uid;
-        editModalInstance = new bootstrap.Modal(document.getElementById('editStudentModal'));
-        await loadTeacherData();
-        setupTabs();
-        setupTransferMarksUI();
-        loadPublishSettings(document.getElementById("publishTerm").value);
-    }
-});
+async function loadTeacherData() {
+    try {
+        let tData = utils.safeGetCache(`cache_user_${state.teacherUid}`);
+        if (!tData) {
+            const docSnap = await network.withRetry(() => getDoc(doc(db, "users", state.teacherUid)));
+            if (!docSnap.exists()) return;
+            tData = docSnap.data();
+            utils.safeSetCache(`cache_user_${state.teacherUid}`, tData);
+        }
+            
+        state.assignedClass = localStorage.getItem('teacherCurrentClass') || (Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass));
+        state.madrasaUid = tData.madrasaUid;
+        state.teacherNameGlobal = tData.name;
+            
+        await verifySmartCache(); 
 
-logoutBtn.addEventListener("click", () => { signOut(auth).then(() => { localStorage.clear(); window.location.href = "index.html"; }); });
+        let adminData = utils.safeGetCache(`cache_admin_${state.madrasaUid}`);
+        if (!state.isSmartCacheValid || !adminData) {
+            const adminDoc = await network.withRetry(() => getDoc(doc(db, "users", state.madrasaUid)));
+            if (adminDoc.exists()) {
+                adminData = { madrasaNameGlobal: adminDoc.data().madrasaName || "MADRASA", customMadrasaId: adminDoc.data().madrasaId || state.madrasaUid };
+                utils.safeSetCache(`cache_admin_${state.madrasaUid}`, adminData);
+            }
+        }
+        state.madrasaNameGlobal = adminData.madrasaNameGlobal;
+        state.customMadrasaId = adminData.customMadrasaId;
+        
+        DOM.madrasaName.textContent = state.madrasaNameGlobal;
+        DOM.className.textContent = state.assignedClass;
 
-function getGrade(percentage, isPassed) {
-    if (!isPassed) return "D"; 
-    if (percentage >= 90) return "A+";
-    if (percentage >= 80) return "A";
-    if (percentage >= 70) return "B+";
-    if (percentage >= 60) return "B";
-    if (percentage >= 50) return "C+";
-    if (percentage >= 40) return "C";
-    return "D+"; 
+        let subData = utils.safeGetCache(`cache_subs_${state.assignedClass}`);
+        if (!state.isSmartCacheValid || !subData) {
+            const subDoc = await network.withRetry(() => getDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`)));
+            const rawSubjects = subDoc.exists() ? (subDoc.data().subjects || []) : (tData.subjects || []);
+            state.classMuallimName = subDoc.exists() ? (subDoc.data().muallimName || "") : "";
+            
+            state.classSubjects = rawSubjects.map(sub => typeof sub === 'string' ? { name: sub, maxMark: 100, passMark: 35 } : sub);
+            utils.safeSetCache(`cache_subs_${state.assignedClass}`, { subjects: state.classSubjects, muallimName: state.classMuallimName });
+        } else {
+            state.classSubjects = subData.subjects; 
+            state.classMuallimName = subData.muallimName;
+        }
+
+        const metaDoc = await network.withRetry(() => getDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`)));
+        const activeExamTerm = metaDoc.exists() && metaDoc.data().currentExamTerm ? metaDoc.data().currentExamTerm : "Monthly Test";
+
+        if (document.getElementById("examTerm")) document.getElementById("examTerm").value = activeExamTerm;
+        if (document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = activeExamTerm;
+            
+        renderSubjectsUI();
+        await loadStudents();
+        loadResults();
+        setupRealtimeSync();
+        
+    } catch (e) { utils.showError("Initialization failed.", e); }
 }
 
-function formatDate(dateStr) {
-    if (!dateStr) return "-";
-    if (String(dateStr).includes("-")) {
-        const parts = String(dateStr).split("-");
-        if (parts[0].length === 4) { return `${parts[2]}-${parts[1]}-${parts[0]}`; }
+async function loadStudents(isSilent = false) {
+    if (!state.assignedClass || !state.madrasaUid) return;
+    try {
+        let students = await StudentService.loadStudentsData(state.madrasaUid, state.assignedClass, state.isSmartCacheValid);
+        
+        students.sort((a, b) => {
+            const genderA = (a.gender || "Male").toLowerCase();
+            const genderB = (b.gender || "Male").toLowerCase();
+            if (genderA === 'male' && genderB !== 'male') return -1;
+            if (genderA !== 'male' && genderB === 'male') return 1;
+            return String(a.admissionNo || "").localeCompare(String(b.admissionNo || ""), undefined, {numeric: true});
+        });
+
+        state.studentsMap = {};
+        const tbody = document.getElementById("studentsTableBody");
+        const markSelect = document.getElementById("markStudentSelect");
+        const pdfListBody = document.getElementById("pdfStudentListBody");
+        
+        if(pdfListBody) pdfListBody.innerHTML = "";
+        if(tbody) tbody.innerHTML = students.length === 0 ? '<tr><td colspan="9" style="text-align: center;">No students added.</td></tr>' : "";
+        if(markSelect) markSelect.innerHTML = '<option value="">-- Select Student --</option>';
+        
+        let boyRoll = 1, girlRoll = 1;
+        let deskLabelsHTML = ""; 
+        let currentChunk = ""; 
+        let labelCount = 0;
+
+        if(document.getElementById("pdfMadrasaName4")) document.getElementById("pdfMadrasaName4").textContent = state.madrasaNameGlobal;
+        if(document.getElementById("pdfClassTitle4")) document.getElementById("pdfClassTitle4").textContent = `CLASS: ${state.assignedClass.toUpperCase()} - STUDENTS LIST`;
+
+        students.forEach(st => {
+            state.studentsMap[st.id] = st;
+            
+            const roll = (st.gender === "Male") ? boyRoll++ : girlRoll++;
+            const color = (st.gender === "Female") ? "#d32f2f" : "#000000";
+
+            if(tbody) {
+                const actionButtons = `
+                    <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+                        <button class="btn-custom btn-warning-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.openEditModal('${st.id}')">Edit</button> 
+                        <button class="btn-custom btn-danger-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.deleteStudent('${st.id}')">Del</button>
+                    </div>`;
+
+                tbody.innerHTML += `<tr>
+                    <td style="color:${color};">${st.admissionNo}</td>
+                    <td style="color:${color};">${st.name}</td>
+                    <td style="color:${color};">${st.gender}</td>
+                    <td>${st.fatherName || "-"}</td>
+                    <td>${utils.formatDate(st.dob)}</td>
+                    <td>${st.contactNo || "-"}</td>
+                    <td>${st.whatsappNo || "-"}</td>
+                    <td>${st.place || "-"}</td>
+                    <td>${actionButtons}</td>
+                </tr>`;
+            }
+            if(markSelect) markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}">${st.admissionNo} - ${st.name}</option>`;
+            
+            if(pdfListBody) {
+                pdfListBody.innerHTML += `<tr>
+                    <td style="color:${color};">${st.admissionNo}</td>
+                    <td style="text-align:left; color:${color};">${st.name}</td>
+                    <td style="color:${color};">${st.gender}</td>
+                    <td>${st.fatherName || "-"}</td>
+                    <td>${utils.formatDate(st.dob)}</td>
+                    <td>${st.contactNo || "-"}</td>
+                    <td>${st.whatsappNo || "-"}</td>
+                    <td>${st.place || "-"}</td>
+                </tr>`;
+            }
+
+            currentChunk += `
+                <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 165px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
+                    <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
+                    <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Name: ${st.name.toUpperCase()}</p>
+                    <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Class: ${state.assignedClass.toUpperCase()}</p>
+                </div>
+            `;
+            labelCount++;
+
+            if (labelCount % 15 === 0) {
+                deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
+                currentChunk = "";
+            }
+        });
+
+        if (currentChunk !== "") {
+            deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
+        }
+        
+        const deskLabelsGridElement = document.getElementById("deskLabelsGrid");
+        if(deskLabelsGridElement) deskLabelsGridElement.innerHTML = deskLabelsHTML;
+
+    } catch (e) {
+        if(!isSilent) utils.showError("Student load failed.", e);
     }
-    return dateStr;
+}
+
+async function loadUpgradeStudents() {
+    const upgradeBody = document.getElementById("upgradeTableBody");
+    if (!upgradeBody) return;
+    
+    try {
+        let students = await StudentService.loadStudentsData(state.madrasaUid, state.assignedClass, state.isSmartCacheValid);
+        
+        students.sort((a, b) => {
+            const genderA = (a.gender || "Male").toLowerCase();
+            const genderB = (b.gender || "Male").toLowerCase();
+            if (genderA === 'male' && genderB !== 'male') return -1;
+            if (genderA !== 'male' && genderB === 'male') return 1;
+            return String(a.admissionNo || "").localeCompare(String(b.admissionNo || ""), undefined, {numeric: true});
+        });
+
+        upgradeBody.innerHTML = students.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No students found</td></tr>' : "";
+        
+        students.forEach(st => {
+            const color = (st.gender === "Female") ? "#d32f2f" : "#000000";
+
+            upgradeBody.innerHTML += `<tr>
+                <td><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td>
+                <td style="color:${color};">${st.admissionNo}</td>
+                <td style="color:${color};">${st.name}</td>
+                <td style="color:${color};">${st.gender}</td>
+            </tr>`;
+        });
+    } catch (e) { console.error("Failed to load upgrade students", e); }
+}
+
+async function loadResults(isSilent = false) {
+    const term = document.getElementById("viewResultTerm")?.value;
+    if (!term || !state.assignedClass || !state.madrasaUid) return;
+    
+    let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Att.</th>`;
+    let pdfThs1 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
+    let pdfThs2 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
+    
+    state.classSubjects.forEach(sub => {
+        ths += `<th>${sub.name}</th>`;
+        pdfThs1 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
+        pdfThs2 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
+    });
+    
+    ths += `<th>Total</th><th>Rank</th><th>Grade</th><th>Status</th><th>Action</th></tr>`;
+    pdfThs1 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
+    pdfThs2 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
+    
+    if(document.getElementById("screenResultHead")) document.getElementById("screenResultHead").innerHTML = ths;
+    if(document.getElementById("pdfThead1")) document.getElementById("pdfThead1").innerHTML = pdfThs1;
+    if(document.getElementById("pdfThead2")) document.getElementById("pdfThead2").innerHTML = pdfThs2;
+
+    const titleText = `EXAMINATION RESULT. CLASS: ${state.assignedClass.toUpperCase()} - ${term.toUpperCase()}`;
+    ['pdfMadrasaName1', 'pdfMadrasaName2'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).textContent = state.madrasaNameGlobal; });
+    if(document.getElementById("pdfExamTitle1")) document.getElementById("pdfExamTitle1").textContent = titleText;
+    if(document.getElementById("pdfExamTitle2")) document.getElementById("pdfExamTitle2").textContent = titleText;
+    if(document.getElementById("pdfTeacherName1")) document.getElementById("pdfTeacherName1").textContent = state.classMuallimName ? state.classMuallimName.toUpperCase() : state.teacherNameGlobal;
+
+
+    const cacheKey = `cache_marks_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
+    let snapData = utils.safeGetCache(cacheKey, []);
+    
+    if (snapData.length === 0 || !state.isSmartCacheValid) {
+        snapData = [];
+        try {
+            const snap = await network.withRetry(() => getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass), where("term", "==", term))));
+            snap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
+            utils.safeSetCache(cacheKey, snapData);
+        } catch(e) { if(!isSilent) utils.showError("Results load failed.", e); return; }
+    }
+    
+    let marksMap = {};
+    snapData.forEach(data => marksMap[data.studentId] = data);
+
+    let rawResults = Object.values(state.studentsMap).map(st => 
+        marksMap[st.id] ? marksMap[st.id] : { isPlaceholder: true, studentId: st.id, studentName: st.name, marks: {}, totalMarks: "", status: "" }
+    );
+
+    const processedResults = calculateRanks(rawResults);
+    
+    processedResults.sort((a, b) => {
+        const gA = state.studentsMap[a.studentId]?.gender || "Male";
+        const gB = state.studentsMap[b.studentId]?.gender || "Male";
+        if (gA !== gB) return gA === "Male" ? -1 : 1;
+        return String(state.studentsMap[a.studentId]?.admissionNo || "").localeCompare(String(state.studentsMap[b.studentId]?.admissionNo || ""), undefined, {numeric: true});
+    });
+
+    renderResultsTable(processedResults, term);
+}
+
+function renderResultsTable(results, term) {
+    const sBody = document.getElementById("screenResultBody");
+    const pBody1 = document.getElementById("pdfTbody1");
+    const pBody2 = document.getElementById("pdfTbody2");
+
+    if (results.length === 0) {
+        if(sBody) sBody.innerHTML = `<tr><td colspan="100%" style="text-align:center;">No students added.</td></tr>`;
+        if(pBody1) pBody1.innerHTML = "";
+        if(pBody2) pBody2.innerHTML = "";
+        return;
+    }
+
+    let html = "", pdfHtml1 = "", pdfHtml2 = "";
+    let boyRoll = 1, girlRoll = 1;
+    let bTot = 0, gTot = 0, bPass = 0, gPass = 0;
+    let hasMarks = false;
+    
+    results.forEach(res => {
+        if (!res.isPlaceholder && res.totalMarks !== undefined && res.totalMarks !== "") { hasMarks = true; }
+
+        const st = state.studentsMap[res.studentId];
+        const gen = st?.gender || "Male";
+        const roll = gen === "Male" ? boyRoll++ : girlRoll++;
+        const color = gen === "Female" ? "#d32f2f" : "#000000"; 
+        
+        if (gen === "Male") { bTot++; if (res.status !== "Failed" && !res.isPlaceholder) bPass++; }
+        else { gTot++; if (res.status !== "Failed" && !res.isPlaceholder) gPass++; }
+
+        let marksHTML = "", marksHTMLPdf = "";
+        state.classSubjects.forEach(sub => {
+            const mark = res.marks?.[sub.name] ?? "";
+            const isFail = mark === "A" || (mark !== "" && Number(mark) < (sub.passMark || 35));
+            const mColor = isFail ? "#d32f2f" : "#000000";
+            marksHTML += `<td style="color: ${mColor};">${mark}</td>`;
+            marksHTMLPdf += `<td style="color: ${mColor};">${mark}</td>`;
+        });
+        
+        let displayGrade = res.grade || "";
+        if (!res.isPlaceholder && res.totalMarks && res.status !== "Failed" && res.status !== "Promoted") {
+            displayGrade = utils.getGrade(res.percentage, true);
+        }
+        if (res.status === "Promoted") displayGrade = "D+"; 
+
+        let statusText = "";
+        let pdfPassText = "";
+        let statusColor = "#000000";
+
+        if (!res.isPlaceholder && res.status) {
+            statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
+            statusColor = res.status === "Failed" ? "#d32f2f" : (res.status === "Promoted" ? "#16a34a" : "#000000"); 
+            if (res.status === "Failed") pdfPassText = "F";
+            else if (res.status === "Promoted") pdfPassText = "PR";
+            else if (res.status === "Passed") pdfPassText = "P";
+        }
+
+        const actionBtn = res.isPlaceholder ? "" : `
+            <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+                <button class="btn-custom btn-warning-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.editMark('${res.studentId}', '${term}')">Edit</button> 
+                <button class="btn-custom btn-danger-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.deleteMark('${res.id}', '${term}')">Del</button>
+            </div>`;
+            
+        const attendanceDisp = (res.attendance && res.attendance !== "-") ? res.attendance : "";
+
+        html += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td style="color:${color};">${res.studentName}</td>
+            <td>${attendanceDisp}</td>${marksHTML}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td>
+            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td><td>${actionBtn}</td></tr>`;
+            
+        pdfHtml1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
+            <td>${attendanceDisp}</td>${marksHTMLPdf}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
+            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
+            
+        pdfHtml2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td class="name-col" style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
+            <td>${attendanceDisp}</td>${marksHTMLPdf}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
+            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
+    });
+    
+    if(sBody) sBody.innerHTML = html;
+    if(pBody1) pBody1.innerHTML = pdfHtml1;
+    if(pBody2) pBody2.innerHTML = pdfHtml2;
+
+    if (hasMarks) {
+        if(document.getElementById("pdfTot1")) document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
+        if(document.getElementById("pdfPass1")) document.getElementById("pdfPass1").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
+        if(document.getElementById("pdfPerc1")) document.getElementById("pdfPerc1").innerHTML = `<td style="color: black;">${bTot > 0 ? Math.round((bPass/bTot)*100) : 0}%</td><td style="color: #d32f2f;">${gTot > 0 ? Math.round((gPass/gTot)*100) : 0}%</td><td style="color: black;">${(bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0}%</td>`;
+    } else {
+        if(document.getElementById("pdfTot1")) document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
+        if(document.getElementById("pdfPass1")) document.getElementById("pdfPass1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+        if(document.getElementById("pdfPerc1")) document.getElementById("pdfPerc1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+    }
 }
 
 async function syncResultCache(term) {
-    if (!madrasaUid || !assignedClass || !term) return;
-    const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
+    if (!state.madrasaUid || !state.assignedClass || !term) return;
+    const docId = `${state.madrasaUid}_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
     try {
         const publishSnap = await getDoc(doc(db, "publish_settings", docId));
         let isPublished = false; let publishDateTime = "";
@@ -212,143 +438,72 @@ async function syncResultCache(term) {
             publishDateTime = publishSnap.data().publishDateTime || "";
         }
 
-        const cacheKey = `cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`;
-        let snapData = [];
-        if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
-            snapData = JSON.parse(localStorage.getItem(cacheKey));
-        } else {
-            const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
+        const cacheKey = `cache_marks_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
+        let snapData = utils.safeGetCache(cacheKey, []);
+        if (snapData.length === 0 || !state.isSmartCacheValid) {
+            snapData = [];
+            const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass), where("term", "==", term)));
             marksSnap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
-            safeSetCache(cacheKey, JSON.stringify(snapData));
+            utils.safeSetCache(cacheKey, snapData);
         }
 
         let marksMap = {}; snapData.forEach(data => { marksMap[data.studentId] = data; });
-        let allStudents = Object.values(studentsMap);
+        let allStudents = Object.values(state.studentsMap);
+        
+        let tempValidMarks = [];
+        allStudents.forEach(st => { if (marksMap[st.id]) tempValidMarks.push(marksMap[st.id]); });
+        
+        const processedMarks = calculateRanks(tempValidMarks);
+        let classResults = []; 
+        let boyRoll = 1, girlRoll = 1;
+        
         allStudents.sort((a, b) => {
             if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
             return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
-        });
-        
-        // 📌 പബ്ലിക് റിസൾട്ടിലും ശരിയായ റാങ്ക് വരാൻ വേണ്ടിയുള്ള മാറ്റം
-        let tempValidMarks = [];
-        allStudents.forEach(st => {
-            if (marksMap[st.id]) tempValidMarks.push(marksMap[st.id]);
-        });
-        
-        tempValidMarks.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
-        let cRank = 1, pMark = null;
-        tempValidMarks.forEach(r => {
-            if (r.status === "Failed" || r.totalMarks === "" || r.totalMarks === undefined) {
-                r.calculatedRank = "";
-            } else {
-                if (pMark === null) { r.calculatedRank = cRank; }
-                else if (Number(r.totalMarks) === Number(pMark)) { r.calculatedRank = cRank; } // ഒരേ മാർക്കിന് ഒരേ റാങ്ക്
-                else { cRank++; r.calculatedRank = cRank; } // വ്യത്യസ്ത മാർക്കിന് അടുത്ത റാങ്ക്
-                pMark = r.totalMarks;
-            }
-        });
-
-        let classResults = []; let boyRoll = 1, girlRoll = 1;
-        allStudents.forEach(st => {
-            let mData = marksMap[st.id]; let gen = st.gender || "Male";
+        }).forEach(st => {
+            let mData = processedMarks.find(m => m.studentId === st.id); 
+            let gen = st.gender || "Male";
             let roll = gen === "Male" ? boyRoll++ : girlRoll++;
             if (mData) {
                 classResults.push({
                     rollNo: roll, studentId: st.id, studentName: st.name, admissionNo: st.admissionNo,
-                    gender: gen, className: assignedClass, marks: mData.marks, attendance: mData.attendance,
+                    gender: gen, className: state.assignedClass, marks: mData.marks, attendance: mData.attendance,
                     totalMarks: mData.totalMarks, maxMarkTotal: mData.maxMarkTotal, percentage: mData.percentage,
-                    grade: mData.grade, status: mData.status, 
-                    rank: mData.calculatedRank || "", // ശരിയായ റാങ്ക് സേവ് ചെയ്യുന്നു
-                    subjectConfig: mData.subjectConfig
+                    grade: mData.grade, status: mData.status, rank: mData.calculatedRank || "", subjectConfig: mData.subjectConfig
                 });
             }
         });
         
-        await setDoc(doc(db, "result_cache", docId), {
-            madrasaUid, className: assignedClass, term, isPublished, publishDateTime,
-            lastUpdated: new Date().toISOString(), resultsData: JSON.stringify(classResults)
+        let batches = [];
+        let currentBatch = writeBatch(db);
+        let operationCount = 0;
+
+        currentBatch.set(doc(db, "result_meta", docId), {
+            madrasaUid: state.madrasaUid, className: state.assignedClass, term, isPublished, publishDateTime,
+            lastUpdated: new Date().toISOString(), totalStudents: classResults.length
         });
+        operationCount++;
+
+        classResults.forEach(res => {
+            if (operationCount >= 490) { 
+                batches.push(currentBatch.commit());
+                currentBatch = writeBatch(db);
+                operationCount = 0;
+            }
+            const studentDocId = `${state.madrasaUid}_${term.replace(/\s+/g, '')}_${res.admissionNo}`;
+            currentBatch.set(doc(db, "public_results", studentDocId), {
+                ...res, madrasaUid: state.madrasaUid, term, isPublished, publishDateTime, className: state.assignedClass
+            });
+            operationCount++;
+        });
+        
+        if (operationCount > 0) batches.push(currentBatch.commit());
+        await Promise.all(batches);
+
     } catch (e) { console.error("Auto-Cache Sync Error:", e); }
 }
 
-async function loadTeacherData() {
-    try {
-        let tData;
-        const cachedTeacher = localStorage.getItem(`cache_user_${teacherUid}`);
-        if (cachedTeacher) { 
-            try { tData = JSON.parse(cachedTeacher); } catch(e) { localStorage.removeItem(`cache_user_${teacherUid}`); return loadTeacherData(); }
-        } else {
-            const teacherDoc = await getDoc(doc(db, "users", teacherUid));
-            if (teacherDoc.exists()) {
-                tData = teacherDoc.data();
-                safeSetCache(`cache_user_${teacherUid}`, JSON.stringify(tData));
-            } else return;
-        }
-            
-        assignedClass = localStorage.getItem('teacherCurrentClass') || (Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass));
-        madrasaUid = tData.madrasaUid;
-        teacherNameGlobal = tData.name;
-            
-        await verifySmartCache(); 
-
-        if (isSmartCacheValid && localStorage.getItem(`cache_admin_${madrasaUid}`)) {
-            try {
-                const adminData = JSON.parse(localStorage.getItem(`cache_admin_${madrasaUid}`));
-                madrasaNameGlobal = adminData.madrasaNameGlobal; customMadrasaId = adminData.customMadrasaId;
-            } catch(e) { localStorage.removeItem(`cache_admin_${madrasaUid}`); }
-        } else {
-            const adminDoc = await getDoc(doc(db, "users", madrasaUid));
-            if (adminDoc.exists()) {
-                madrasaNameGlobal = adminDoc.data().madrasaName || "MADRASA";
-                customMadrasaId = adminDoc.data().madrasaId || madrasaUid;
-                safeSetCache(`cache_admin_${madrasaUid}`, JSON.stringify({ madrasaNameGlobal, customMadrasaId }));
-            }
-        }
-        displayMadrasaName.textContent = madrasaNameGlobal;
-        displayClassName.textContent = assignedClass;
-
-        if (isSmartCacheValid && localStorage.getItem(`cache_subs_${assignedClass}`)) {
-            try {
-                const subData = JSON.parse(localStorage.getItem(`cache_subs_${assignedClass}`));
-                classSubjects = subData.subjects; classMuallimName = subData.muallimName;
-            } catch(e) { localStorage.removeItem(`cache_subs_${assignedClass}`); }
-        } else {
-            let rawSubjects = [];
-            const subDoc = await getDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`));
-            if(subDoc.exists()) {
-                rawSubjects = subDoc.data().subjects || [];
-                classMuallimName = subDoc.data().muallimName || ""; 
-            } else { rawSubjects = tData.subjects || []; }
-
-            classSubjects = rawSubjects.map(sub => {
-                if(typeof sub === 'string') return { name: sub, maxMark: 100, passMark: 35 }; 
-                return sub;
-            });
-            safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
-        }
-
-        const metaDoc = await getDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`));
-        let activeExamTerm = "Monthly Test"; 
-        if(metaDoc.exists() && metaDoc.data().currentExamTerm) {
-            activeExamTerm = metaDoc.data().currentExamTerm;
-        }
-
-        localStorage.removeItem('savedExamTerm');
-        localStorage.removeItem('savedViewTerm');
-
-        if (document.getElementById("examTerm")) document.getElementById("examTerm").value = activeExamTerm;
-        if (document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = activeExamTerm;
-            
-        const savedPublishTerm = localStorage.getItem('savedPublishTerm');
-        if (savedPublishTerm && document.getElementById("publishTerm")) document.getElementById("publishTerm").value = savedPublishTerm;
-
-        renderSubjectsUI();
-        await loadStudents();
-        loadResults();
-        
-    } catch (e) { console.error("Error loading teacher data", e); }
-}
-
+// 📌 TABS SETUP
 function setupTabs() {
     document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
@@ -359,79 +514,138 @@ function setupTabs() {
             document.getElementById(target).classList.add("active");
             
             if(target === "tab-results") loadResults();
-            if(target === "tab-marks") isEditModeActive = false; 
+            if(target === "tab-upgrade") loadUpgradeStudents();
+            if(target === "tab-marks") state.isEditModeActive = false; 
         });
     });
 }
 
-if (document.getElementById("examTerm")) {
-    document.getElementById("examTerm").addEventListener("change", async (e) => {
-        const newTerm = e.target.value;
-        try {
-            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
-        } catch(err) {}
+function renderSubjectsUI() {
+    const tagsContainer = document.getElementById("subjectTagsContainer");
+    if(tagsContainer) {
+        tagsContainer.innerHTML = "";
+        state.classSubjects.forEach(sub => { 
+            tagsContainer.innerHTML += `
+            <div class="subject-tag" style="display:inline-flex; align-items:center; gap:5px; background:#e0f2fe; padding:4px 8px; border-radius:4px; border:1px solid #bae6fd; margin:4px;">
+                ${sub.name} <span style="color:#0ea5e9; font-size:11px;">(${sub.passMark}/${sub.maxMark})</span>
+                <button style="background:none; border:none; color:#f59e0b; cursor:pointer; font-weight:bold; font-size:14px; margin-left:4px; padding:0;" onclick="window.editSubject('${sub.name}', ${sub.maxMark}, ${sub.passMark})" title="Edit Subject">✎</button>
+                <button style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:bold; font-size:14px; margin-left:4px; padding:0;" onclick="window.deleteSubject('${sub.name}')" title="Delete Subject">X</button>
+            </div>`; 
+        });
+    }
+    const inputsContainer = document.getElementById("dynamicSubjectInputs");
+    if(inputsContainer) {
+        inputsContainer.innerHTML = state.classSubjects.length === 0 ? "<p>No subjects added.</p>" : "";
+        state.classSubjects.forEach(sub => { 
+            inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark"></div>`; 
+        });
+
+        if(state.classSubjects.length > 0) {
+            inputsContainer.innerHTML += `
+            <div class="form-group mt-3" style="background: #e0f2fe; padding: 12px; border-radius: 6px; border: 1px solid #bae6fd;">
+                <label style="display: flex; align-items: center; gap: 8px; margin: 0; color: #0369a1; font-weight: bold; cursor: pointer; font-size: 14px;">
+                    <input type="checkbox" id="forcePromoteCheck" style="width: 18px; height: 18px; cursor: pointer;"> 
+                    Force Promote Student (Without entering marks)
+                </label>
+            </div>`;
+        }
+    }
+}
+
+window.editSubject = async (oldName, oldMax, oldPass) => {
+    const newName = prompt("Enter New Subject Name:", oldName)?.trim();
+    if (!newName) return;
+    const newMax = parseInt(prompt(`Enter Max Mark for ${newName}:`, oldMax));
+    const newPass = parseInt(prompt(`Enter Pass Mark for ${newName}:`, oldPass));
+    
+    if (isNaN(newMax) || isNaN(newPass)) return alert("Invalid marks entered.");
+    
+    try {
+        const subIndex = state.classSubjects.findIndex(s => s.name === oldName);
+        if(subIndex !== -1) {
+            state.classSubjects[subIndex] = { name: newName, maxMark: newMax, passMark: newPass };
+        }
+
+        await network.withRetry(() => setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { subjects: state.classSubjects, muallimName: state.classMuallimName }, { merge: true }));
         
-        document.getElementById("markStudentSelect").value = "";
-        document.getElementById("attendanceInput").value = "";
-        document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
-        if(document.getElementById("forcePromoteCheck")) document.getElementById("forcePromoteCheck").checked = false;
-        document.getElementById("saveMarksBtn").textContent = "Save Marks";
-    });
-}
+        if (newName !== oldName || newMax !== oldMax || newPass !== oldPass) {
+            const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass)));
+            
+            let batches = [];
+            let currentBatch = writeBatch(db);
+            let operationCount = 0;
+            
+            marksSnap.docs.forEach((markDoc) => {
+                const data = markDoc.data();
+                let marksData = data.marks || {};
+                let subjectConfig = data.subjectConfig || [];
+                let needsUpdate = false;
+                
+                const configIndex = subjectConfig.findIndex(s => s.name === oldName);
+                if(configIndex !== -1) {
+                    subjectConfig[configIndex] = { name: newName, maxMark: newMax, passMark: newPass };
+                    needsUpdate = true;
+                }
 
-if (document.getElementById("viewResultTerm")) {
-    document.getElementById("viewResultTerm").addEventListener("change", async (e) => {
-        const newTerm = e.target.value;
-        try {
-            await setDoc(doc(db, "class_meta", `${madrasaUid}_${assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
-            if (document.getElementById("examTerm")) document.getElementById("examTerm").value = newTerm;
-        } catch(err) {}
-        loadResults();
-    });
-}
+                if (newName !== oldName && marksData[oldName] !== undefined) {
+                    marksData[newName] = marksData[oldName];
+                    delete marksData[oldName];
+                    needsUpdate = true;
+                }
 
-if (document.getElementById("publishTerm")) {
-    document.getElementById("publishTerm").addEventListener("change", (e) => {
-        safeSetCache('savedPublishTerm', e.target.value);
-        loadPublishSettings(e.target.value);
-    });
-}
+                if (needsUpdate) {
+                    let newTotalObtained = 0, newTotalMax = 0, isPassed = true;
+                    subjectConfig.forEach(sub => {
+                        newTotalMax += sub.maxMark;
+                        const markVal = marksData[sub.name];
+                        if (markVal === "A") { isPassed = false; } 
+                        else if (markVal !== undefined && markVal !== "" && markVal !== "-") {
+                            const num = Number(markVal);
+                            newTotalObtained += num;
+                            if (num < sub.passMark) isPassed = false;
+                        }
+                    });
+                    const percentage = newTotalMax > 0 ? (newTotalObtained / newTotalMax) * 100 : 0;
+                    let finalStatus = data.status === "Promoted" ? "Promoted" : (isPassed ? "Passed" : "Failed");
+                    let finalGrade = data.status === "Promoted" ? "D+" : utils.getGrade(percentage, isPassed);
 
-document.getElementById("addSubjectBtn").addEventListener("click", async () => {
-    const newSub = document.getElementById("newSubjectName").value.trim();
-    const maxMark = Number(document.getElementById("newSubjectMaxMark").value) || 100;
-    const passMark = Number(document.getElementById("newSubjectPassMark").value) || 35;
-    
-    if(!newSub) return;
-    if(classSubjects.some(s => s.name === newSub)) return alert("Subject already exists!");
-    
-    classSubjects.push({ name: newSub, maxMark, passMark });
-    
-    try { 
-        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { subjects: classSubjects, madrasaUid, className: assignedClass }, { merge: true }); 
-        safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+                    if (operationCount >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); operationCount = 0; }
+                    currentBatch.update(doc(db, "marks", markDoc.id), {
+                        marks: marksData, subjectConfig: subjectConfig, totalMarks: newTotalObtained,
+                        maxMarkTotal: newTotalMax, percentage: percentage, grade: finalGrade, status: finalStatus
+                    });
+                    operationCount++;
+                }
+            });
+            
+            if (operationCount > 0) batches.push(currentBatch.commit());
+            await Promise.all(batches);
+            
+            localStorage.removeItem(`cache_subs_${state.assignedClass}`);
+            const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '');
+            localStorage.removeItem(`cache_marks_${state.assignedClass}_${term}`);
+        }
+
         await triggerCacheUpdate();
-        
-        document.getElementById("newSubjectName").value = ""; 
-        document.getElementById("newSubjectMaxMark").value = ""; 
-        document.getElementById("newSubjectPassMark").value = ""; 
-        renderSubjectsUI(); 
-        loadResults(); 
-    } catch (e) { alert("Error saving subject."); }
-});
+        renderSubjectsUI();
+        loadResults();
+        alert("Subject updated successfully! All previous marks are perfectly safe.");
+    } catch (e) {
+        utils.showError("Failed to update subject.", e);
+    }
+};
 
 window.deleteSubject = async (subName) => {
-    if(!confirm(`Are you absolutely sure you want to delete the subject '${subName}'?\n\nWARNING: This will permanently DELETE all marks associated with this subject for ALL students in this class!`)) return;
+    if(!confirm(`Are you sure you want to delete '${subName}'?\nWARNING: This will permanently DELETE all marks associated with this subject for ALL students!`)) return;
     
-    classSubjects = classSubjects.filter(s => s.name !== subName);
-    
+    state.classSubjects = state.classSubjects.filter(s => s.name !== subName);
     try { 
-        await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { subjects: classSubjects, madrasaUid, className: assignedClass }, { merge: true });
+        await network.withRetry(() => setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { subjects: state.classSubjects, madrasaUid: state.madrasaUid, className: state.assignedClass }, { merge: true }));
+        const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass)));
         
-        const marksQuery = query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass));
-        const marksSnap = await getDocs(marksQuery);
+        let batches = []; let currentBatch = writeBatch(db); let operationCount = 0;
         
-        const updatePromises = marksSnap.docs.map(async (markDoc) => {
+        marksSnap.docs.forEach((markDoc) => {
             const data = markDoc.data();
             let marksData = data.marks || {};
             let subjectConfig = data.subjectConfig || [];
@@ -441,11 +655,9 @@ window.deleteSubject = async (subName) => {
                 subjectConfig = subjectConfig.filter(s => s.name !== subName);
                 
                 let newTotalObtained = 0, newTotalMax = 0, isPassed = true;
-                
                 subjectConfig.forEach(sub => {
                     newTotalMax += sub.maxMark;
                     const markVal = marksData[sub.name];
-                    
                     if (markVal === "A") { isPassed = false; } 
                     else if (markVal !== undefined && markVal !== "" && markVal !== "-") {
                         const num = Number(markVal);
@@ -455,898 +667,358 @@ window.deleteSubject = async (subName) => {
                 });
                 
                 const percentage = newTotalMax > 0 ? (newTotalObtained / newTotalMax) * 100 : 0;
-                const finalGrade = getGrade(percentage, isPassed);
-                
-                return updateDoc(doc(db, "marks", markDoc.id), {
+                let finalStatus = data.status === "Promoted" ? "Promoted" : (isPassed ? "Passed" : "Failed");
+                let finalGrade = data.status === "Promoted" ? "D+" : utils.getGrade(percentage, isPassed);
+
+                if (operationCount >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); operationCount = 0; }
+                currentBatch.update(doc(db, "marks", markDoc.id), {
                     marks: marksData, subjectConfig: subjectConfig, totalMarks: newTotalObtained,
-                    maxMarkTotal: newTotalMax, percentage: percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
+                    maxMarkTotal: newTotalMax, percentage: percentage, grade: finalGrade, status: finalStatus
                 });
+                operationCount++;
             }
         });
+        if (operationCount > 0) batches.push(currentBatch.commit());
+        await Promise.all(batches);
         
-        await Promise.all(updatePromises);
-        
-        localStorage.removeItem(`cache_subs_${assignedClass}`);
-        localStorage.removeItem(`cache_marks_${assignedClass}_${document.getElementById("viewResultTerm").value.replace(/\s+/g, '')}`);
-        isSmartCacheValid = false;
+        localStorage.removeItem(`cache_subs_${state.assignedClass}`);
+        const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '');
+        localStorage.removeItem(`cache_marks_${state.assignedClass}_${term}`);
+        state.isSmartCacheValid = false;
         await triggerCacheUpdate();
         
-        renderSubjectsUI(); 
-        loadResults(); 
-        alert(`Subject '${subName}' and its marks deleted successfully!`);
-    } catch (e) { alert("Error deleting subject."); }
+        renderSubjectsUI(); loadResults(); 
+        alert(`Subject '${subName}' deleted successfully!`);
+    } catch (e) { utils.showError("Error deleting subject.", e); }
 };
 
-function renderSubjectsUI() {
-    const tagsContainer = document.getElementById("subjectTagsContainer");
-    tagsContainer.innerHTML = "";
-    classSubjects.forEach(sub => { 
-        tagsContainer.innerHTML += `<div class="subject-tag">${sub.name} <span style="color:#0ea5e9; font-size:11px;">(${sub.passMark}/${sub.maxMark})</span> <button class="delete-sub-btn" onclick="deleteSubject('${sub.name}')">X</button></div>`; 
-    });
-    
-    const inputsContainer = document.getElementById("dynamicSubjectInputs");
-    inputsContainer.innerHTML = classSubjects.length === 0 ? "<p style='color:#64748b;'>No subjects added.</p>" : "";
-    
-    classSubjects.forEach(sub => { 
-        inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark}, Pass: ${sub.passMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark or 'A'"></div>`; 
-    });
+window.deleteStudent = async (studentId) => {
+    if (!confirm("Are you sure you want to delete this student and their marks?")) return;
+    try {
+        await StudentService.deleteStudentAndMarks(studentId);
+        localStorage.removeItem(`cache_students_${state.assignedClass}`);
+        state.isSmartCacheValid = false;
+        await triggerCacheUpdate();
+        await loadStudents();
+        loadResults();
+    } catch (e) { utils.showError("Failed to delete student.", e); }
+};
 
-    if(classSubjects.length > 0) {
-        inputsContainer.innerHTML += `
-        <div class="form-group mt-3" style="background: #e0f2fe; padding: 12px; border-radius: 6px; border: 1px solid #bae6fd;">
-            <label style="display: flex; align-items: center; gap: 8px; margin: 0; color: #0369a1; font-weight: bold; cursor: pointer; font-size: 14px;">
-                <input type="checkbox" id="forcePromoteCheck" style="width: 18px; height: 18px; cursor: pointer;">
-                Force Promote Student (Without entering marks)
-            </label>
-        </div>
-        `;
-    }
-}
-
-document.getElementById("addStudentBtn").addEventListener("click", async () => {
-    const name = document.getElementById("studentName").value.trim();
+document.getElementById("addStudentBtn")?.addEventListener("click", async () => {
+    const name = utils.sanitizeInput(document.getElementById("studentName").value);
     const admissionNo = document.getElementById("admissionNo").value.trim();
-    const gender = document.getElementById("gender").value;
-    const dob = document.getElementById("dob").value;
-    const fatherName = document.getElementById("fatherName").value.trim();
-    const place = document.getElementById("place").value.trim();
-    const contactNo = document.getElementById("contactNo").value.trim();
-    const whatsappNo = document.getElementById("whatsappNo").value.trim();
-
     if (!name || !admissionNo) return alert("Name and Admission No are required.");
     
-    const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo));
-    if (exists) return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
+    const exists = Object.values(state.studentsMap).some(s => String(s.admissionNo) === String(admissionNo));
+    if (exists) return alert(`Admission No '${admissionNo}' already exists!`);
     
-    document.getElementById("addStudentBtn").textContent = "Saving...";
+    utils.disableBtn("addStudentBtn", "Saving...");
     try {
-        const newStudentData = { name, admissionNo, gender, dob, fatherName, place, contactNo, whatsappNo, className: assignedClass, madrasaUid };
-        const newDocRef = await addDoc(collection(db, "students"), newStudentData);
+        const newStudentData = {
+            name, admissionNo,
+            gender: document.getElementById("gender").value,
+            dob: document.getElementById("dob").value,
+            fatherName: utils.sanitizeInput(document.getElementById("fatherName").value),
+            place: document.getElementById("place").value.trim(),
+            contactNo: document.getElementById("contactNo").value.trim(),
+            whatsappNo: document.getElementById("whatsappNo").value.trim(),
+            className: state.assignedClass, madrasaUid: state.madrasaUid
+        };
         
-        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
-        students.push({ id: newDocRef.id, ...newStudentData });
-        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
-        
+        await StudentService.addNewStudent(newStudentData);
+        localStorage.removeItem(`cache_students_${state.assignedClass}`);
         await triggerCacheUpdate();
         
         ['studentName', 'admissionNo', 'dob', 'fatherName', 'place', 'contactNo', 'whatsappNo'].forEach(id => document.getElementById(id).value = "");
         await loadStudents();
-    } catch (e) {}
-    document.getElementById("addStudentBtn").textContent = "Save Student Data";
+    } catch (e) { utils.showError("Failed to add student.", e); }
+    finally { utils.enableBtn("addStudentBtn"); }
 });
 
-async function loadStudents() {
-    if (!assignedClass || !madrasaUid) return;
-    const tbody = document.getElementById("studentsTableBody");
-    const upgradeBody = document.getElementById("upgradeTableBody");
-    const pdfListBody = document.getElementById("pdfStudentListBody");
-    const markSelect = document.getElementById("markStudentSelect");
-    
-    const cacheKey = `cache_students_${assignedClass}`;
-    let students = [];
-    
-    if (isSmartCacheValid && localStorage.getItem(cacheKey)) { 
-        try { students = JSON.parse(localStorage.getItem(cacheKey)); } catch(e) { localStorage.removeItem(cacheKey); }
-    } 
-    
-    if (students.length === 0) {
-        const snap = await getDocs(query(collection(db, "students"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass)));
-        snap.forEach(doc => students.push({ id: doc.id, ...doc.data() }));
-        safeSetCache(cacheKey, JSON.stringify(students));
-    }
-
-    studentsMap = {};
-    students.sort((a, b) => {
-        if (a.gender !== b.gender) return a.gender === 'Male' ? -1 : 1;
-        return String(a.admissionNo).localeCompare(String(b.admissionNo), undefined, {numeric: true});
-    });
-    
-    tbody.innerHTML = students.length === 0 ? '<tr><td colspan="9" style="text-align: center; padding: 20px;">No students added yet.</td></tr>' : "";
-    upgradeBody.innerHTML = students.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No students</td></tr>' : "";
-    pdfListBody.innerHTML = "";
-    markSelect.innerHTML = '<option value="">-- Select Student --</option>';
-    
-    document.getElementById("pdfMadrasaName4").textContent = madrasaNameGlobal;
-    document.getElementById("pdfClassTitle4").textContent = `CLASS: ${assignedClass.toUpperCase()} - STUDENTS LIST`;
-
-    let boyRoll = 1, girlRoll = 1;
-    let deskLabelsHTML = ""; let currentChunk = ""; let labelCount = 0;
-
-    students.forEach(st => {
-        studentsMap[st.id] = st;
-        const displayDob = formatDate(st.dob);
+if (document.getElementById("markStudentSelect")) {
+    document.getElementById("markStudentSelect").addEventListener("change", async (e) => {
+        const studentId = e.target.value; 
+        const term = document.getElementById("examTerm")?.value;
+        if (!studentId || !term) return;
         
-        tbody.innerHTML += `<tr>
-            <td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
-            <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td>
-            <td><button class="btn-custom btn-warning-custom btn-small btn-auto" onclick="openEditModal('${st.id}')">Edit</button> <button class="btn-custom btn-danger-custom btn-small btn-auto" onclick="deleteStudent('${st.id}')">Del</button></td></tr>`;
-            
-        upgradeBody.innerHTML += `<tr><td><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td><td>${st.admissionNo}</td><td>${st.name}</td><td>${st.gender}</td></tr>`;
+        try {
+            const markData = await MarkService.getStudentMark(studentId, term);
+            const forcePromoteCheck = document.getElementById("forcePromoteCheck");
 
-        pdfListBody.innerHTML += `<tr>
-            <td>${st.admissionNo}</td><td style="text-align:left;">${st.name}</td><td>${st.gender}</td><td>${st.fatherName || "-"}</td>
-            <td>${displayDob}</td><td>${st.contactNo || "-"}</td><td>${st.whatsappNo || "-"}</td><td>${st.place || "-"}</td></tr>`;
-
-        markSelect.innerHTML += `<option value="${st.id}" data-name="${st.name}" data-adm="${st.admissionNo}">${st.admissionNo} - ${st.name}</option>`;
-
-        const roll = st.gender === "Male" ? boyRoll++ : girlRoll++;
-        const color = st.gender === "Female" ? "#d32f2f" : "#000000"; 
-        
-        currentChunk += `
-            <div class="desk-label-box" style="border-color: ${color}; color: ${color}; width: 31%; min-height: 165px; border: 2px solid; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; margin-bottom: 15px;">
-                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Roll No: ${roll}</p>
-                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Name: ${st.name.toUpperCase()}</p>
-                <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">Class: ${assignedClass.toUpperCase()}</p>
-            </div>
-        `;
-        labelCount++;
-
-        if (labelCount % 15 === 0) {
-            deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
-            currentChunk = "";
+            if (markData) {
+                const attVal = markData.attendance || "";
+                document.getElementById("attendanceInput").value = attVal === "-" ? "" : attVal;
+                
+                document.querySelectorAll(".mark-input").forEach(inp => {
+                    const subName = inp.getAttribute("data-subject");
+                    const mVal = markData.marks && markData.marks[subName] !== undefined ? markData.marks[subName] : "";
+                    inp.value = mVal === "-" ? "" : mVal;
+                });
+                
+                if(forcePromoteCheck) forcePromoteCheck.checked = (markData.status === "Promoted");
+                document.getElementById("saveMarksBtn").textContent = "Update Marks";
+            } else {
+                document.getElementById("attendanceInput").value = "";
+                document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
+                if(forcePromoteCheck) forcePromoteCheck.checked = false;
+                document.getElementById("saveMarksBtn").textContent = "Save Marks";
+            }
+        } catch (error) {
+            console.error("Error fetching marks:", error);
         }
     });
-    
-    if (currentChunk !== "") {
-        deskLabelsHTML += `<div class="pdf-page-chunk" style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start; padding: 20px; background: white; width: 800px; margin: 0 auto; box-sizing: border-box;">${currentChunk}</div>`;
-    }
-    
-    const deskLabelsGridElement = document.getElementById("deskLabelsGrid");
-    if(deskLabelsGridElement) deskLabelsGridElement.innerHTML = deskLabelsHTML;
 }
 
-window.openEditModal = (studentId) => {
-    const st = studentsMap[studentId];
-    if(!st) return;
-    document.getElementById("editStudentId").value = st.id;
-    document.getElementById("editName").value = st.name || "";
-    document.getElementById("editAdNo").value = st.admissionNo || "";
-    document.getElementById("editGender").value = st.gender || "Male";
-    document.getElementById("editDob").value = st.dob || "";
-    document.getElementById("editFatherName").value = st.fatherName || "";
-    document.getElementById("editPlace").value = st.place || "";
-    document.getElementById("editContactNo").value = st.contactNo || "";
-    document.getElementById("editWhatsappNo").value = st.whatsappNo || "";
-    editModalInstance.show();
-};
-
-document.getElementById("saveEditStudentBtn").addEventListener("click", async () => {
-    const id = document.getElementById("editStudentId").value;
-    const name = document.getElementById("editName").value.trim();
-    const admissionNo = document.getElementById("editAdNo").value.trim();
-    if(!name || !admissionNo) return alert("Name & Ad No required");
-    
-    const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === String(admissionNo) && s.id !== id);
-    if(exists) return alert(`മുന്നറിയിപ്പ്: '${admissionNo}' എന്ന അഡ്മിഷൻ നമ്പർ നിലവിൽ മറ്റൊരു കുട്ടിക്ക് നൽകിയിട്ടുണ്ട്! ദയവായി അഡ്മിഷൻ നമ്പർ മാറ്റുക.`);
-    
-    document.getElementById("saveEditStudentBtn").textContent = "Saving...";
-    try {
-        const updatedData = {
-            name, admissionNo, gender: document.getElementById("editGender").value,
-            dob: document.getElementById("editDob").value, fatherName: document.getElementById("editFatherName").value.trim(),
-            place: document.getElementById("editPlace").value.trim(), contactNo: document.getElementById("editContactNo").value.trim(),
-            whatsappNo: document.getElementById("editWhatsappNo").value.trim()
-        };
-        await updateDoc(doc(db, "students", id), updatedData);
-        
-        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
-        const index = students.findIndex(s => s.id === id);
-        if(index !== -1) students[index] = { ...students[index], ...updatedData };
-        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
-        
-        await triggerCacheUpdate();
-        editModalInstance.hide();
-        await loadStudents();
-    } catch (e) { alert("Error updating student"); }
-    document.getElementById("saveEditStudentBtn").textContent = "Save Changes";
-});
-
-window.deleteStudent = async (studentId) => {
-    if (!confirm("Are you sure you want to delete this student and ALL associated marks?")) return;
-    try {
-        await deleteDoc(doc(db, "students", studentId));
-        const marksSnap = await getDocs(query(collection(db, "marks"), where("studentId", "==", studentId)));
-        marksSnap.docs.forEach(async (m) => await deleteDoc(doc(db, "marks", m.id)));
-        
-        let students = JSON.parse(localStorage.getItem(`cache_students_${assignedClass}`) || "[]");
-        students = students.filter(s => s.id !== studentId);
-        safeSetCache(`cache_students_${assignedClass}`, JSON.stringify(students));
-        
-        localStorage.removeItem(`cache_marks_${assignedClass}_${document.getElementById("viewResultTerm").value.replace(/\s+/g, '')}`);
-        isSmartCacheValid = false;
-        await triggerCacheUpdate();
-        
-        await loadStudents();
-        loadResults();
-    } catch (e) {}
-};
-
-document.getElementById("selectAllUpgrade").addEventListener("change", (e) => {
-    const isChecked = e.target.checked;
-    document.querySelectorAll(".upgrade-checkbox").forEach(cb => cb.checked = isChecked);
-});
-
-document.getElementById("processUpgradeBtn").addEventListener("click", async () => {
-    const targetClass = document.getElementById("upgradeTargetClass").value;
-    if(targetClass === assignedClass) return alert("Select a DIFFERENT class.");
-    const checkboxes = document.querySelectorAll(".upgrade-checkbox:checked");
-    if(checkboxes.length === 0) return alert("Select students to upgrade.");
-    if(!confirm(`Move ${checkboxes.length} students to Class ${targetClass}?`)) return;
-    
-    document.getElementById("processUpgradeBtn").textContent = "Upgrading...";
-    try {
-        const updatePromises = Array.from(checkboxes).map(cb => updateDoc(doc(db, "students", cb.value), { className: String(targetClass) }));
-        await Promise.all(updatePromises);
-        
-        localStorage.removeItem(`cache_students_${assignedClass}`); 
-        localStorage.removeItem(`cache_students_${targetClass}`);
-        isSmartCacheValid = false;
-        await triggerCacheUpdate();
-        
-        alert(`Upgraded ${checkboxes.length} students.`);
-        document.getElementById("selectAllUpgrade").checked = false;
-        await loadStudents();
-    } catch(e) {}
-    document.getElementById("processUpgradeBtn").textContent = "Upgrade Selected Students";
-});
-
-document.getElementById("markStudentSelect").addEventListener("change", async (e) => {
-    const studentId = e.target.value; const term = document.getElementById("examTerm").value;
-    if (!studentId || !term) return;
-    const markDoc = await getDoc(doc(db, "marks", `${studentId}_${term.replace(/\s+/g, '')}`));
-    
-    const forcePromoteCheck = document.getElementById("forcePromoteCheck");
-
-    if (markDoc.exists()) {
-        const data = markDoc.data();
-        const attVal = data.attendance || "";
-        document.getElementById("attendanceInput").value = attVal === "-" ? "" : attVal;
-        
-        document.querySelectorAll(".mark-input").forEach(inp => {
-            const subName = inp.getAttribute("data-subject");
-            const mVal = data.marks && data.marks[subName] !== undefined ? data.marks[subName] : "";
-            inp.value = mVal === "-" ? "" : mVal;
-        });
-        if(forcePromoteCheck) forcePromoteCheck.checked = (data.status === "Promoted");
-        document.getElementById("saveMarksBtn").textContent = "Update Marks";
-    } else {
+if (document.getElementById("examTerm")) {
+    document.getElementById("examTerm").addEventListener("change", async (e) => {
+        const newTerm = e.target.value;
+        try { await setDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`), { currentExamTerm: newTerm }, { merge: true }); } catch(err) {}
+        document.getElementById("markStudentSelect").value = "";
         document.getElementById("attendanceInput").value = "";
         document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
-        if(forcePromoteCheck) forcePromoteCheck.checked = false;
+        if(document.getElementById("forcePromoteCheck")) document.getElementById("forcePromoteCheck").checked = false;
         document.getElementById("saveMarksBtn").textContent = "Save Marks";
+    });
+}
+
+// 🛠️ പുതിയ ട്രാൻസ്ഫർ മാർക്ക്സ് (Move Marks) ഫംഗ്ഷൻ 
+document.getElementById("moveMarksBtn")?.addEventListener("click", async () => {
+    const fromTerm = document.getElementById("transferFromTerm")?.value;
+    const toTerm = document.getElementById("transferToTerm")?.value;
+    
+    if (!fromTerm || !toTerm) {
+        return alert("ദയവായി മാറ്റേണ്ട എക്സാമും (From) ശരിയായ എക്സാമും (To) തിരഞ്ഞെടുക്കുക!");
+    }
+    
+    if (fromTerm === toTerm) {
+        return alert("ഒരേ എക്സാമിലേക്ക് തന്നെ മാറ്റാൻ സാധിക്കില്ല!");
+    }
+    
+    if (!confirm(`'${fromTerm}' ലെ മുഴുവൻ മാർക്കുകളും '${toTerm}' ലേക്ക് മാറ്റാൻ (Move) ഉറപ്പാണോ?\n\n(ശ്രദ്ധിക്കുക: '${toTerm}' ൽ നേരത്തെ നൽകിയ മാർക്കുകൾ ഉണ്ടെങ്കിൽ അത് മാഞ്ഞുപോകും, കൂടാതെ '${fromTerm}' ലെ പഴയ മാർക്കുകൾ പൂർണ്ണമായും ഡിലീറ്റ് ആവുകയും ചെയ്യും)`)) return;
+    
+    const btn = document.getElementById("moveMarksBtn");
+    const originalText = btn.textContent;
+    btn.textContent = "Moving Data...";
+    btn.disabled = true;
+    
+    try {
+        const snap = await network.withRetry(() => getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass), where("term", "==", fromTerm))));
+        
+        if(snap.empty) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return alert(`'${fromTerm}' ലെ പേരിൽ കുട്ടികൾക്ക് മാർക്കുകൾ ഒന്നും നൽകിയതായി കാണുന്നില്ല!`);
+        }
+        
+        let batches = [];
+        let currentBatch = writeBatch(db);
+        let count = 0;
+        
+        snap.docs.forEach(markDoc => {
+            const data = markDoc.data();
+            const studentId = data.studentId;
+            const newDocId = `${studentId}_${toTerm.replace(/\s+/g, '')}`;
+            
+            let newData = { ...data, term: toTerm };
+            
+            if (count >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); count = 0; }
+            
+            // പുതിയ ഐഡിയിലേക്ക് സെറ്റ് ചെയ്യുന്നു 
+            currentBatch.set(doc(db, "marks", newDocId), newData);
+            // പഴയ ഡോക്യുമെന്റ് ഡിലീറ്റ് ചെയ്യുന്നു (Moving logic)
+            currentBatch.delete(doc(db, "marks", markDoc.id));
+            
+            count += 2;
+        });
+        
+        if (count > 0) batches.push(currentBatch.commit());
+        await Promise.all(batches);
+        
+        localStorage.removeItem(`cache_marks_${state.assignedClass}_${toTerm.replace(/\s+/g, '')}`);
+        localStorage.removeItem(`cache_marks_${state.assignedClass}_${fromTerm.replace(/\s+/g, '')}`);
+        await triggerCacheUpdate();
+        
+        alert("മാർക്കുകൾ വിജയകരമായി മാറ്റിയിട്ടുണ്ട് (Moved Successfully)!");
+        
+        document.getElementById("transferFromTerm").value = "";
+        document.getElementById("transferToTerm").value = "";
+        
+        const studentSelect = document.getElementById("markStudentSelect");
+        if(studentSelect) {
+            studentSelect.value = ""; 
+            studentSelect.dispatchEvent(new Event('change'));
+        }
+        
+        if(document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = toTerm;
+        if(document.getElementById("examTerm")) document.getElementById("examTerm").value = toTerm;
+        
+        loadResults();
+    } catch (e) {
+        utils.showError("Error moving marks.", e);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 });
 
-document.getElementById("saveMarksBtn").addEventListener("click", async () => {
-    const select = document.getElementById("markStudentSelect"); const studentId = select.value;
+
+if (document.getElementById("viewResultTerm")) {
+    document.getElementById("viewResultTerm").addEventListener("change", async (e) => {
+        const newTerm = e.target.value;
+        try {
+            await setDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`), { currentExamTerm: newTerm }, { merge: true });
+            if (document.getElementById("examTerm")) document.getElementById("examTerm").value = newTerm;
+        } catch(err) {}
+        loadResults();
+    });
+}
+
+document.getElementById("saveMarksBtn")?.addEventListener("click", async () => {
+    const select = document.getElementById("markStudentSelect"); 
+    const studentId = select.value;
     if (!studentId) return alert("Select a student");
     
-    const studentName = select.options[select.selectedIndex]?.getAttribute("data-name");
     const term = document.getElementById("examTerm").value;
+    let marksData = {}, totalObtained = 0, isPassed = true, valid = true, totalMaxPossible = 0;
+    const isForcePromoted = document.getElementById("forcePromoteCheck")?.checked;
     
-    let marksData = {}, totalObtained = 0, isPassed = true, valid = true;
-    let totalMaxPossible = 0;
-    
-    const forcePromoteCheck = document.getElementById("forcePromoteCheck");
-    const isForcePromoted = forcePromoteCheck && forcePromoteCheck.checked;
-    
-    classSubjects.forEach(sub => {
+    state.classSubjects.forEach(sub => {
         totalMaxPossible += sub.maxMark;
-        const inp = document.querySelector(`.mark-input[data-subject="${sub.name}"]`);
-        const val = inp.value.trim().toUpperCase();
+        const val = document.querySelector(`.mark-input[data-subject="${sub.name}"]`).value.trim().toUpperCase();
         
         if (val === "") { marksData[sub.name] = ""; }
         else if (val === "A") { marksData[sub.name] = "A"; isPassed = false; }
         else {
             const num = Number(val);
             if (isNaN(num) || num > sub.maxMark) valid = false;
-            else { 
-                marksData[sub.name] = num; 
-                totalObtained += num; 
-                if (num < sub.passMark) isPassed = false; 
-            }
+            else { marksData[sub.name] = num; totalObtained += num; if (num < sub.passMark) isPassed = false; }
         }
     });
     
-    if (!valid && !isForcePromoted) return alert("Please check marks inputs. Ensure they don't exceed Max Mark for each subject.");
+    if (!valid && !isForcePromoted) return alert("Validation Failed: Marks exceed maximum allowed limit.");
     
-    const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
-    let finalGrade = getGrade(percentage, isPassed);
-    let finalStatus = isPassed ? "Passed" : "Failed";
-
-    if (isForcePromoted) {
-        finalStatus = "Promoted";
-        finalGrade = "D+";
-    }
-    
-    document.getElementById("saveMarksBtn").textContent = "Saving...";
+    utils.disableBtn("saveMarksBtn", "Saving...");
     try {
         const docId = `${studentId}_${term.replace(/\s+/g, '')}`;
         const finalData = {
-            studentId, studentName, madrasaUid, className: assignedClass, term,
-            marks: marksData, attendance: document.getElementById("attendanceInput").value, 
-            totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
-            subjectConfig: classSubjects, percentage, grade: finalGrade, status: finalStatus
+            studentId, studentName: state.studentsMap[studentId].name, madrasaUid: state.madrasaUid, className: state.assignedClass, term,
+            marks: marksData, attendance: document.getElementById("attendanceInput").value, totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
+            subjectConfig: state.classSubjects, percentage: totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0, 
+            grade: isForcePromoted ? "D+" : utils.getGrade(totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0, isPassed), 
+            status: isForcePromoted ? "Promoted" : (isPassed ? "Passed" : "Failed")
         };
         
-        await setDoc(doc(db, "marks", docId), finalData);
-        
-        let snapData = JSON.parse(localStorage.getItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`) || "[]");
-        const index = snapData.findIndex(m => m.id === docId);
-        if (index !== -1) snapData[index] = { id: docId, ...finalData };
-        else snapData.push({ id: docId, ...finalData });
-        safeSetCache(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
+        await MarkService.saveStudentMarks(docId, finalData, term, state.assignedClass);
         
         await triggerCacheUpdate();
         await syncResultCache(term);
         
-        alert("Marks saved successfully!"); 
-        select.value = ""; document.querySelectorAll(".mark-input").forEach(i => i.value="");
-        if(forcePromoteCheck) forcePromoteCheck.checked = false;
+        alert("Marks saved securely."); 
+        document.querySelectorAll(".mark-input").forEach(i => i.value="");
+        if(document.getElementById("forcePromoteCheck")) document.getElementById("forcePromoteCheck").checked = false;
         loadResults();
 
-        if (isEditModeActive) {
+        if (state.isEditModeActive) {
             document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
             document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            
             const resultsTabBtn = document.querySelector('[data-tab="tab-results"]');
             const resultsTabContent = document.getElementById("tab-results");
-            
             if (resultsTabBtn) resultsTabBtn.classList.add("active");
             if (resultsTabContent) resultsTabContent.classList.add("active");
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            
-            isEditModeActive = false; 
+            state.isEditModeActive = false; 
         }
-
-    } catch (e) {}
-    document.getElementById("saveMarksBtn").textContent = "Save Marks";
+    } catch (e) { utils.showError("Save operation failed.", e); }
+    finally { utils.enableBtn("saveMarksBtn"); }
 });
-
-document.getElementById("uploadStudentExcelBtn").addEventListener("click", () => {
-    const file = document.getElementById("studentExcel").files[0];
-    if (!file) return alert("Select an Excel file.");
-    
-    document.getElementById("uploadStudentExcelBtn").textContent = "Uploading...";
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
-            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            let count = 0; let skippedCount = 0;
-            
-            for (const row of json) {
-                const nameKey = Object.keys(row).find(k => k.toLowerCase() === 'name');
-                const admKey = Object.keys(row).find(k => k.toLowerCase() === 'admissionno');
-                const genderKey = Object.keys(row).find(k => k.toLowerCase() === 'gender');
-                
-                if (!nameKey || !admKey) continue;
-                
-                const newAdmNo = String(row[admKey]).trim();
-                const exists = Object.values(studentsMap).some(s => String(s.admissionNo) === newAdmNo);
-                if (exists) { skippedCount++; continue; }
-                
-                const dobKey = Object.keys(row).find(k => k.toLowerCase() === 'dob');
-                const fatherKey = Object.keys(row).find(k => k.toLowerCase() === 'fathername');
-                const placeKey = Object.keys(row).find(k => k.toLowerCase() === 'place');
-                const contactKey = Object.keys(row).find(k => k.toLowerCase() === 'contactno');
-                const whatsappKey = Object.keys(row).find(k => k.toLowerCase() === 'whatsappno');
-
-                await addDoc(collection(db, "students"), {
-                    name: String(row[nameKey]).trim(), admissionNo: newAdmNo, gender: genderKey ? String(row[genderKey]).trim() : "Male",
-                    dob: dobKey ? String(row[dobKey]).trim() : "", fatherName: fatherKey ? String(row[fatherKey]).trim() : "",
-                    place: placeKey ? String(row[placeKey]).trim() : "", contactNo: contactKey ? String(row[contactKey]).trim() : "",
-                    whatsappNo: whatsappKey ? String(row[whatsappKey]).trim() : "", className: assignedClass, madrasaUid
-                });
-                count++;
-            }
-            
-            localStorage.removeItem(`cache_students_${assignedClass}`);
-            isSmartCacheValid = false;
-            await triggerCacheUpdate();
-            
-            let alertMsg = `Uploaded ${count} students successfully.`;
-            if (skippedCount > 0) alertMsg += `\n\n(Skipped ${skippedCount} students because their Admission Number already exists in this class).`;
-            alert(alertMsg);
-            
-            document.getElementById("studentExcel").value = "";
-            await loadStudents();
-        } catch (err) { alert("Error parsing excel."); }
-        document.getElementById("uploadStudentExcelBtn").textContent = "Upload Excel Data";
-    };
-    reader.readAsArrayBuffer(file);
-});
-
-document.getElementById("uploadMarksExcelBtn").addEventListener("click", () => {
-    const file = document.getElementById("marksExcel").files[0];
-    const term = document.getElementById("examTerm").value;
-    if (!file) return alert("Select an Excel file.");
-    
-    document.getElementById("uploadMarksExcelBtn").textContent = "Uploading...";
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: "array" });
-            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            let count = 0;
-            let totalMaxPossible = classSubjects.reduce((sum, sub) => sum + sub.maxMark, 0);
-
-            for (const row of json) {
-                const admKey = Object.keys(row).find(k => k.toLowerCase() === 'admissionno');
-                const attKey = Object.keys(row).find(k => k.toLowerCase() === 'attendance');
-                if (!admKey) continue;
-                
-                const excelAdm = String(row[admKey]).trim();
-                const student = Object.values(studentsMap).find(s => String(s.admissionNo) === excelAdm);
-                if (!student) continue;
-                
-                let marksData = {}, totalObtained = 0, isPassed = true, isValid = true;
-                
-                for (const sub of classSubjects) {
-                    const subKey = Object.keys(row).find(k => k.toLowerCase() === sub.name.toLowerCase());
-                    let val = subKey ? String(row[subKey]).trim().toUpperCase() : "";
-                    
-                    if (val === "A") { marksData[sub.name] = "A"; isPassed = false; } 
-                    else if (val === "" || val === "-") { marksData[sub.name] = ""; } 
-                    else {
-                        const num = Number(val);
-                        if (isNaN(num) || num > sub.maxMark) { isValid = false; break; }
-                        marksData[sub.name] = num;
-                        totalObtained += num;
-                        if (num < sub.passMark) isPassed = false;
-                    }
-                }
-                
-                if (!isValid) continue; 
-                
-                const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
-                const finalGrade = getGrade(percentage, isPassed);
-                
-                const docId = `${student.id}_${term.replace(/\s+/g, '')}`;
-                let finalAtt = attKey ? String(row[attKey]).trim() : "";
-                if(finalAtt === "-") finalAtt = "";
-
-                await setDoc(doc(db, "marks", docId), {
-                    studentId: student.id, studentName: student.name, madrasaUid, className: assignedClass, term,
-                    marks: marksData, attendance: finalAtt, totalMarks: totalObtained, maxMarkTotal: totalMaxPossible,
-                    subjectConfig: classSubjects, percentage, grade: finalGrade, status: isPassed ? "Passed" : "Failed"
-                });
-                count++;
-            }
-            
-            localStorage.removeItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`);
-            isSmartCacheValid = false;
-            await triggerCacheUpdate();
-            
-            await syncResultCache(term);
-            
-            alert(`Uploaded ${count} student marks and synced cache.`);
-            document.getElementById("marksExcel").value = "";
-            loadResults();
-        } catch (err) { alert("Error parsing excel."); }
-        document.getElementById("uploadMarksExcelBtn").textContent = "Upload Marks";
-    };
-    reader.readAsArrayBuffer(file);
-});
-
-document.getElementById("deleteAllMarksTermBtn").addEventListener("click", async () => {
-    const term = document.getElementById("viewResultTerm").value;
-    if(!confirm(`Are you absolutely sure you want to DELETE ALL marks for ${term} in Class ${assignedClass}?`)) return;
-    
-    document.getElementById("deleteAllMarksTermBtn").textContent = "Deleting...";
-    try {
-        const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
-        const deletePromises = snap.docs.map(mDoc => deleteDoc(doc(db, "marks", mDoc.id)));
-        await Promise.all(deletePromises);
-        
-        localStorage.removeItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`);
-        isSmartCacheValid = false;
-        await triggerCacheUpdate();
-        
-        await syncResultCache(term);
-        
-        alert(`All marks for ${term} deleted successfully.`);
-        loadResults();
-    } catch (e) { alert("Error deleting marks."); }
-    document.getElementById("deleteAllMarksTermBtn").textContent = "Delete ALL Marks for this Term";
-});
-
-async function loadResults() {
-    const term = document.getElementById("viewResultTerm").value;
-    if (!assignedClass || !madrasaUid) return;
-    
-    let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Att.</th>`;
-    let pdfThs1 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
-    let pdfThs2 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
-    
-    classSubjects.forEach(sub => {
-        ths += `<th>${sub.name}</th>`;
-        pdfThs1 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
-        pdfThs2 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
-    });
-    
-    ths += `<th>Total</th><th>Rank</th><th>Grade</th><th>Status</th><th>Action</th></tr>`;
-    pdfThs1 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
-    pdfThs2 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
-    
-    document.getElementById("screenResultHead").innerHTML = ths;
-    document.getElementById("pdfThead1").innerHTML = pdfThs1;
-    document.getElementById("pdfThead2").innerHTML = pdfThs2;
-    
-    const titleText = `EXAMINATION RESULT. CLASS: ${assignedClass.toUpperCase()} - ${term.toUpperCase()}`;
-    ['pdfMadrasaName1', 'pdfMadrasaName2'].forEach(id => document.getElementById(id).textContent = madrasaNameGlobal);
-    document.getElementById("pdfExamTitle1").textContent = titleText;
-    document.getElementById("pdfExamTitle2").textContent = titleText;
-    document.getElementById("pdfTeacherName1").textContent = classMuallimName ? classMuallimName.toUpperCase() : teacherNameGlobal;
-    
-    const cacheKey = `cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`;
-    let snapData = [];
-    
-    if (isSmartCacheValid && localStorage.getItem(cacheKey)) {
-        try { snapData = JSON.parse(localStorage.getItem(cacheKey)); } catch(e) { localStorage.removeItem(cacheKey); }
-    } 
-    
-    if (snapData.length === 0) {
-        const snap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", madrasaUid), where("className", "==", assignedClass), where("term", "==", term)));
-        snap.forEach(doc => snapData.push({ id: doc.id, ...doc.data() }));
-        safeSetCache(cacheKey, JSON.stringify(snapData));
-    }
-    
-    let marksMap = {};
-    snapData.forEach(data => { marksMap[data.studentId] = data; });
-
-    let results = [];
-    
-    Object.values(studentsMap).forEach(st => {
-        if (marksMap[st.id]) { results.push(marksMap[st.id]); } 
-        else {
-            results.push({
-                isPlaceholder: true, studentId: st.id, studentName: st.name, marks: {},
-                attendance: "", totalMarks: "", percentage: 0, grade: "", status: ""
-            });
-        }
-    });
-
-    if (results.length === 0) {
-        document.getElementById("screenResultBody").innerHTML = `<tr><td colspan="100%" style="text-align:center; padding:20px;">No students added in this class yet.</td></tr>`;
-        ['pdfTbody1', 'pdfTbody2'].forEach(id => document.getElementById(id).innerHTML = "");
-        return;
-    }
-    
-    // 📌 ടീച്ചർ ഡാഷ്ബോർഡിലെ ടേബിളിൽ ശരിയായ റാങ്ക് വരാൻ വേണ്ടിയുള്ള മാറ്റം
-    results.sort((a, b) => Number(b.totalMarks || 0) - Number(a.totalMarks || 0));
-    let currentRank = 1; 
-    let previousMark = null; 
-    let hasMarks = false;
-
-    results.forEach(r => {
-        if (!r.isPlaceholder && r.totalMarks !== undefined && r.totalMarks !== "") { hasMarks = true; }
-        
-        if (r.isPlaceholder || r.status === "Failed" || r.totalMarks === "") { 
-            r.rank = ""; 
-        } else {
-            if (previousMark === null) {
-                r.rank = currentRank;
-            } else if (Number(r.totalMarks) === Number(previousMark)) {
-                r.rank = currentRank; // ഒരേ മാർക്കിന് ഒരേ റാങ്ക്
-            } else {
-                currentRank++; // വ്യത്യസ്ത മാർക്കിന് അടുത്ത റാങ്ക്
-                r.rank = currentRank;
-            }
-            previousMark = r.totalMarks;
-        }
-    });
-    
-    results.sort((a, b) => {
-        const stA = studentsMap[a.studentId];
-        const stB = studentsMap[b.studentId];
-        const gA = stA ? stA.gender : "Male";
-        const gB = stB ? stB.gender : "Male";
-        if (gA !== gB) return gA === "Male" ? -1 : 1;
-        const adA = stA ? String(stA.admissionNo) : "";
-        const adB = stB ? String(stB.admissionNo) : "";
-        return adA.localeCompare(adB, undefined, {numeric: true});
-    });
-    
-    let sBody = "", pBody1 = "", pBody2 = "";
-    let bTot = 0, gTot = 0, bPass = 0, gPass = 0;
-    let boyRoll = 1, girlRoll = 1;
-    
-    results.forEach(res => {
-        const st = studentsMap[res.studentId];
-        const adNo = st ? st.admissionNo : "-";
-        const gen = st ? st.gender : "Male";
-        
-        if (gen === "Male") { bTot++; if (res.status !== "Failed" && !res.isPlaceholder) bPass++; }
-        else { gTot++; if (res.status !== "Failed" && !res.isPlaceholder) gPass++; }
-        
-        const roll = gen === "Male" ? boyRoll++ : girlRoll++;
-        const color = gen === "Female" ? "#d32f2f" : "#000000"; 
-        
-        let marksHTMLScreen = "", marksHTMLPdf1 = "", marksHTMLPdf2 = "";
-        
-        classSubjects.forEach(sub => {
-            const rawMark = res.marks && res.marks[sub.name] !== undefined ? res.marks[sub.name] : "";
-            const mark = (rawMark === "-" || rawMark === undefined || rawMark === null) ? "" : rawMark;
-            const passLimit = sub.passMark || 35;
-            const isFailMark = mark === "A" || (mark !== "" && Number(mark) < passLimit);
-            const mColor = isFailMark ? "#d32f2f" : "#000000";
-            
-            marksHTMLScreen += `<td style="color: ${mColor};">${mark}</td>`;
-            marksHTMLPdf1 += `<td style="color: ${mColor};">${mark}</td>`;
-            marksHTMLPdf2 += `<td style="color: ${mColor};">${mark}</td>`;
-        });
-        
-        let displayGrade = res.grade || "";
-        if (!res.isPlaceholder && (!displayGrade || displayGrade.includes("Failed") || displayGrade.toLowerCase() === "passed")) {
-            if (res.totalMarks !== "") displayGrade = getGrade(res.percentage, res.status !== "Failed");
-        }
-        if (res.status === "Promoted") displayGrade = "D+"; 
-
-        let statusText = ""; let statusColor = "#000000"; let pdfPassText = "";
-
-        if (!res.isPlaceholder && res.status) {
-            statusText = res.status === "Failed" ? "FAILED" : (res.status === "Promoted" ? "PROMOTED" : "PASSED");
-            statusColor = res.status === "Failed" ? "#d32f2f" : (res.status === "Promoted" ? "#16a34a" : "#000000"); 
-            pdfPassText = statusText === "FAILED" ? "F" : (statusText === "PROMOTED" ? "PR" : "P");
-        }
-
-        const actionBtn = res.isPlaceholder ? "" : `
-            <div style="display:flex; gap:4px; justify-content:center;">
-                <button class="btn-custom btn-warning-custom btn-small" style="padding:4px 8px; font-size:11px;" onclick="editMark('${res.studentId}', '${term}')">Edit</button>
-                <button class="btn-custom btn-danger-custom btn-small" style="padding:4px 8px; font-size:11px;" onclick="deleteMark('${res.id}', '${term}')">Del</button>
-            </div>`;
-        const attendanceDisp = (res.attendance && res.attendance !== "-") ? res.attendance : "";
-
-        sBody += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td style="color:${color};">${res.studentName}</td>
-            <td>${attendanceDisp}</td>${marksHTMLScreen}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td>
-            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td><td>${actionBtn}</td></tr>`;
-            
-        pBody1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td>
-            <td>${attendanceDisp}</td>${marksHTMLPdf1}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
-            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
-            
-        pBody2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${adNo}</td><td class="name-col" style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td>
-            <td>${attendanceDisp}</td>${marksHTMLPdf2}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td>
-            <td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
-    });
-    
-    document.getElementById("screenResultBody").innerHTML = sBody;
-    document.getElementById("pdfTbody1").innerHTML = pBody1;
-    document.getElementById("pdfTbody2").innerHTML = pBody2;
-    
-    if (hasMarks) {
-        document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
-        document.getElementById("pdfPass1").innerHTML = `<td style="color: black;">${bPass}</td><td style="color: #d32f2f;">${gPass}</td><td style="color: black;">${bPass + gPass}</td>`;
-        document.getElementById("pdfPerc1").innerHTML = `<td style="color: black;">${bTot > 0 ? Math.round((bPass/bTot)*100) : 0}%</td><td style="color: #d32f2f;">${gTot > 0 ? Math.round((gPass/gTot)*100) : 0}%</td><td style="color: black;">${(bTot+gTot) > 0 ? Math.round(((bPass+gPass)/(bTot+gTot))*100) : 0}%</td>`;
-    } else {
-        document.getElementById("pdfTot1").innerHTML = `<td style="color: black;">${bTot}</td><td style="color: #d32f2f;">${gTot}</td><td style="color: black;">${bTot + gTot}</td>`;
-        document.getElementById("pdfPass1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
-        document.getElementById("pdfPerc1").innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
-    }
-}
 
 window.editMark = (studentId, term) => {
-    isEditModeActive = true; 
-    
+    state.isEditModeActive = true; 
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
     
     const marksTabBtn = document.querySelector('[data-tab="tab-marks"]');
     const marksTabContent = document.getElementById("tab-marks");
-    
     if (marksTabBtn) marksTabBtn.classList.add("active");
     if (marksTabContent) marksTabContent.classList.add("active");
 
     const examTermSelect = document.getElementById("examTerm");
-    if (examTermSelect) {
-        examTermSelect.value = term;
-    }
+    if (examTermSelect) examTermSelect.value = term;
 
     const studentSelect = document.getElementById("markStudentSelect");
     if (studentSelect) {
         studentSelect.value = studentId;
         studentSelect.dispatchEvent(new Event('change'));
     }
-    
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 window.deleteMark = async (docId, term) => {
-    if(!confirm("Delete this result?")) return;
-    await deleteDoc(doc(db, "marks", docId));
-    
-    let snapData = JSON.parse(localStorage.getItem(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`) || "[]");
-    snapData = snapData.filter(m => m.id !== docId);
-    safeSetCache(`cache_marks_${assignedClass}_${term.replace(/\s+/g, '')}`, JSON.stringify(snapData));
-    
-    await triggerCacheUpdate();
-    await syncResultCache(term);
-    loadResults();
-};
-
-async function loadPublishSettings(term) {
-    if(!madrasaUid || !assignedClass || !term) return;
-    const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
-    const statusText = document.getElementById("publishStatusText");
-    
+    if(!confirm("Are you sure you want to delete this result?")) return;
     try {
-        const docSnap = await getDoc(doc(db, "publish_settings", docId));
-        if(docSnap.exists()) {
-            const data = docSnap.data();
-            document.getElementById("publishStatus").value = data.isPublished ? "published" : "hidden";
-            document.getElementById("publishDateTime").value = data.publishDateTime || "";
-            
-            if(data.isPublished) {
-                if(data.publishDateTime && new Date(data.publishDateTime) > new Date()) {
-                    const dt = new Date(data.publishDateTime);
-                    statusText.innerHTML = `<span style="color:#f59e0b;">⏳ Status: Scheduled to Publish on ${dt.getDate()}-${dt.getMonth()+1}-${dt.getFullYear()} at ${dt.toLocaleTimeString()}</span>`;
-                } else { statusText.innerHTML = `<span style="color:#27ae60;">✅ Status: Published (Visible to Students)</span>`; }
-            } else { statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Hidden from Students)</span>`; }
-        } else {
-            document.getElementById("publishStatus").value = "hidden";
-            document.getElementById("publishDateTime").value = "";
-            statusText.innerHTML = `<span style="color:#ef4444;">🔒 Status: Locked (Default)</span>`;
-        }
-    } catch(e) { console.error("Error loading publish settings", e); }
-}
-
-document.getElementById("savePublishSettingsBtn").addEventListener("click", async () => {
-    const term = document.getElementById("publishTerm").value;
-    const isPublished = document.getElementById("publishStatus").value === "published";
-    const publishDateTime = document.getElementById("publishDateTime").value;
-    const docId = `${madrasaUid}_${assignedClass}_${term.replace(/\s+/g, '')}`;
-    const btn = document.getElementById("savePublishSettingsBtn");
-    
-    btn.textContent = "Saving & Syncing Cache...";
-    btn.disabled = true;
-    
-    try {
-        await setDoc(doc(db, "publish_settings", docId), { madrasaUid, className: assignedClass, term, isPublished, publishDateTime });
+        await network.withRetry(() => deleteDoc(doc(db, "marks", docId)));
+        
+        let snapData = utils.safeGetCache(`cache_marks_${state.assignedClass}_${term.replace(/\s+/g, '')}`, []);
+        snapData = snapData.filter(m => m.id !== docId);
+        utils.safeSetCache(`cache_marks_${state.assignedClass}_${term.replace(/\s+/g, '')}`, snapData);
+        
         await triggerCacheUpdate();
         await syncResultCache(term);
-        
-        alert(`Settings & Cache for ${term} synced successfully!`);
-        loadPublishSettings(term);
-    } catch(e) { alert("Error saving settings & cache."); }
-    
-    btn.textContent = "Save & Sync Cache";
-    btn.disabled = false;
-});
-
-async function generatePDF(areaId, fileName, orientation = 'p') {
-    const area = document.getElementById(areaId);
-    const wrapper = area.parentElement;
-    
-    const origPos = wrapper.style.position;
-    const origZ = wrapper.style.zIndex;
-    const origOpacity = wrapper.style.opacity;
-    
-    wrapper.style.position = "absolute"; 
-    wrapper.style.zIndex = "-1";
-    wrapper.style.opacity = "1";
-    window.scrollTo(0, 0);
-
-    const canvasOptions = { scale: 2, useCORS: true, backgroundColor: "#ffffff", scrollY: 0, scrollX: 0 };
-
-    if (areaId === 'pdfDeskLabelsArea') {
-        const pages = area.querySelectorAll('.pdf-page-chunk');
-        if (pages.length > 0) {
-            const pdf = new jspdf.jsPDF(orientation, 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            
-            for (let i = 0; i < pages.length; i++) {
-                if (i > 0) pdf.addPage();
-                const canvas = await html2canvas(pages[i], canvasOptions);
-                const imgData = canvas.toDataURL("image/png");
-                
-                let imgWidth = pdfWidth - 10;
-                let imgHeight = (canvas.height * imgWidth) / canvas.width;
-                
-                if (imgHeight > (pdfHeight - 10)) {
-                    let ratio = (pdfHeight - 10) / imgHeight;
-                    imgHeight = imgHeight * ratio;
-                    imgWidth = imgWidth * ratio;
-                }
-                
-                const xPos = (pdfWidth - imgWidth) / 2;
-                pdf.addImage(imgData, 'PNG', xPos, 5, imgWidth, imgHeight); 
-            }
-            pdf.save(fileName);
-            wrapper.style.position = origPos;
-            wrapper.style.zIndex = origZ;
-            wrapper.style.opacity = origOpacity;
-            return;
-        }
+        loadResults();
+    } catch(e) { 
+        utils.showError("Error deleting result.", e); 
     }
+};
 
-    html2canvas(area, canvasOptions).then(canvas => {
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jspdf.jsPDF(orientation, 'mm', 'a4');
-        
-        let pdfWidth = pdf.internal.pageSize.getWidth();
-        let pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        let imgWidth = pdfWidth - 10;
-        let imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
-        if (imgHeight > (pdfHeight - 10)) {
-            let ratio = (pdfHeight - 10) / imgHeight;
-            imgHeight = imgHeight * ratio;
-            imgWidth = imgWidth * ratio;
-        }
-        
-        const xPos = (pdfWidth - imgWidth) / 2;
-        pdf.addImage(imgData, 'PNG', xPos, 5, imgWidth, imgHeight);
-        
-        pdf.save(fileName);
-        wrapper.style.position = origPos;
-        wrapper.style.zIndex = origZ;
-        wrapper.style.opacity = origOpacity;
+document.getElementById("copyResultLinkBtn")?.addEventListener("click", () => {
+    const term = document.getElementById("viewResultTerm").value;
+    const cleanTerm = term.replace(/\s+/g, '');
+    const displayId = state.customMadrasaId || state.madrasaUid; 
+    const link = `${window.location.origin}/public_result.html?madrasa=${displayId}&term=${cleanTerm}`;
+    
+    navigator.clipboard.writeText(link).then(() => {
+        alert("Public Result Link Copied!\n\n" + link);
+    }).catch(err => {
+        prompt("Please copy this link manually:", link);
     });
-}
-
-document.getElementById("downloadStudentListBtn").addEventListener("click", () => {
-    generatePDF("pdfStudentListArea", `Class_${assignedClass}_Students_List.pdf`, 'p');
 });
 
-document.getElementById("downloadDetailedPdfBtn").addEventListener("click", async () => {
-    let currentName = classMuallimName || teacherNameGlobal;
-    let ustadName = prompt("ഈ ക്ലാസ്സിലെ മാർക്ക് ലിസ്റ്റിൽ താഴെ കാണിക്കേണ്ട ഉസ്താദിന്റെ പേര് നൽകുക:", currentName);
-    
+// PDF & Download Settings
+document.getElementById("downloadStudentListBtn")?.addEventListener("click", () => {
+    generatePDF("pdfStudentListArea", `Class_${state.assignedClass}_Students_List.pdf`, 'p');
+});
+
+document.getElementById("downloadDetailedPdfBtn")?.addEventListener("click", async () => {
+    let ustadName = prompt("ഈ ക്ലാസ്സിലെ മാർക്ക് ലിസ്റ്റിൽ താഴെ കാണിക്കേണ്ട ഉസ്താദിന്റെ പേര് നൽകുക:", state.classMuallimName || state.teacherNameGlobal);
     if (ustadName !== null) {
-        let finalName = ustadName.trim() === "" ? teacherNameGlobal : ustadName.trim().toUpperCase();
-        
-        document.getElementById("pdfTeacherName1").textContent = finalName;
-        classMuallimName = finalName;
+        state.classMuallimName = ustadName.trim() === "" ? state.teacherNameGlobal : ustadName.trim().toUpperCase();
+        if(document.getElementById("pdfTeacherName1")) document.getElementById("pdfTeacherName1").textContent = state.classMuallimName;
         
         try {
-            await setDoc(doc(db, "class_subjects", `${madrasaUid}_${assignedClass}`), { muallimName: finalName }, { merge: true });
-            safeSetCache(`cache_subs_${assignedClass}`, JSON.stringify({ subjects: classSubjects, muallimName: classMuallimName }));
+            await setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { muallimName: state.classMuallimName }, { merge: true });
+            utils.safeSetCache(`cache_subs_${state.assignedClass}`, { subjects: state.classSubjects, muallimName: state.classMuallimName });
             await triggerCacheUpdate();
         } catch(e) {}
         
         const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-        generatePDF("pdfExportArea", `Class_${assignedClass}_${term}_Marklist.pdf`, 'p');
+        generatePDF("pdfExportArea", `Class_${state.assignedClass}_${term}_Marklist.pdf`, 'p');
     }
 });
 
-document.getElementById("downloadNoticeBoardPdfBtn").addEventListener("click", () => {
+document.getElementById("downloadNoticeBoardPdfBtn")?.addEventListener("click", () => {
     const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-    generatePDF("pdfNoticeBoardArea", `Class_${assignedClass}_${term}_NoticeBoard.pdf`, 'p'); 
+    generatePDF("pdfNoticeBoardArea", `Class_${state.assignedClass}_${term}_NoticeBoard.pdf`, 'p'); 
 });
 
-document.getElementById("downloadDeskLabelsBtn").addEventListener("click", () => {
+document.getElementById("downloadDeskLabelsBtn")?.addEventListener("click", () => {
     const term = document.getElementById("viewResultTerm").value.replace(/\s+/g, '_');
-    generatePDF("pdfDeskLabelsArea", `Class_${assignedClass}_${term}_DeskLabels.pdf`, 'p');
+    generatePDF("pdfDeskLabelsArea", `Class_${state.assignedClass}_${term}_DeskLabels.pdf`, 'p');
 });
 
-document.getElementById("copyResultLinkBtn").addEventListener("click", () => {
-    const resultUrl = `${window.location.origin}/result.html?mid=${customMadrasaId || madrasaUid}`;
-    navigator.clipboard.writeText(resultUrl).then(() => {
-        alert("Result Link Copied Successfully!\n\nYou can now paste and share this link in WhatsApp.\n\nLink: " + resultUrl);
-    }).catch(err => { alert("Error copying link."); });
+// START APPLICATION
+checkAuth(async (user) => {
+    state.teacherUid = user.uid;
+    editModalInstance = new bootstrap.Modal(document.getElementById('editStudentModal'));
+    setupTabs();
+    await loadTeacherData();
 });

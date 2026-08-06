@@ -190,6 +190,7 @@
         </div>
 
         <div id="tab-marks" class="tab-content">
+            
             <div class="card" style="border-top: 4px solid var(--primary-green);">
                 <h3>Manage Class Subjects & Marks</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -214,7 +215,10 @@
                 </div>
             </div>
 
+            <!-- മാർക്ക് നൽകാനുള്ള പ്രധാന ഭാഗം -->
             <div class="grid-2">
+                
+                <!-- ഇടതുവശം: Manual Mark Entry -->
                 <div class="card">
                     <h3>Manual Mark Entry</h3>
                     <div class="form-group"><label>Select Student</label><select id="markStudentSelect" class="form-control"><option value="">-- Select Student --</option></select></div>
@@ -223,17 +227,53 @@
                     <button class="btn-custom btn-primary-custom" id="saveMarksBtn" style="margin-top: 15px;">Save Marks</button>
                 </div>
 
-                <div class="card">
-                    <h3>Bulk Upload Marks (Excel)</h3>
-                    <div class="form-group"><label>Upload Marks Excel File</label><input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls"></div>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                        <strong>Columns Required:</strong> AdmissionNo, Attendance, [Subject 1], [Subject 2]... <br>
-                    </p>
-                    <button class="btn-custom btn-primary-custom" id="uploadMarksExcelBtn">Upload Marks</button>
-                </div>
-            </div>
-        </div>
+                <!-- വലതുവശം: Bulk Upload & Transfer Marks -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    
+                    <!-- 1. Bulk Upload Box -->
+                    <div class="card" style="margin-bottom: 0;">
+                        <h3>Bulk Upload Marks (Excel)</h3>
+                        <div class="form-group"><label>Upload Marks Excel File</label><input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls"></div>
+                        <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
+                            <strong>Columns Required:</strong> AdmissionNo, Attendance, [Subject 1], [Subject 2]... <br>
+                        </p>
+                        <button class="btn-custom btn-primary-custom" id="uploadMarksExcelBtn">Upload Marks</button>
+                    </div>
 
+                    <!-- 2. Transfer Marks Box -->
+                    <div class="card" style="background-color: #fef9c3; border: 1px solid #fef08a; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 0;">
+                        <h3 style="text-align: center; color: #854d0e; border: none; font-size: 16px; font-weight: bold; margin-bottom: 20px; line-height: 1.5; padding-bottom: 0;">
+                            തെറ്റായ എക്സാമിൽ നൽകിയ <br> മാർക്കുകൾ മാറ്റാൻ (Transfer Marks)
+                        </h3>
+                        <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 140px;">
+                                <select id="transferFromTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
+                                    <option value="" disabled selected>From (മാറ്റേണ്ടത്)</option>
+                                    <option value="Monthly Test">Monthly Test</option>
+                                    <option value="Quarterly Exam">Quarterly Exam</option>
+                                    <option value="Half Yearly Exam">Half Yearly Exam</option>
+                                    <option value="Annual Exam">Annual Exam</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1; min-width: 140px;">
+                                <select id="transferToTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
+                                    <option value="" disabled selected>To (ശരിയായത്)</option>
+                                    <option value="Monthly Test">Monthly Test</option>
+                                    <option value="Quarterly Exam">Quarterly Exam</option>
+                                    <option value="Half Yearly Exam">Half Yearly Exam</option>
+                                    <option value="Annual Exam">Annual Exam</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="moveMarksBtn" class="btn-custom" style="background-color: #f59e0b; color: white; width: 100%; font-size: 16px; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer;">Move Marks</button>
+                    </div>
+
+                </div> <!-- വലതുവശത്തെ ഭാഗം അവസാനിക്കുന്നു -->
+                
+            </div> <!-- grid-2 അവസാനിക്കുന്നു -->
+            
+        </div>
+        
         <div id="tab-results" class="tab-content">
             
             <div class="card">
@@ -364,6 +404,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script type="module" src="teacher_dashboard.js"></script>
+   <script type="module" src="teacher_dashboard.js"></script>
 </body>
 </html>
