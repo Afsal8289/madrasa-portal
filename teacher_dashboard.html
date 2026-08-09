@@ -13,7 +13,6 @@
     <style>
         :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
         
-        /* മാറ്റം 1: സ്ക്രീൻ വലത്തോട്ട് നീങ്ങാതിരിക്കാൻ overflow-x: hidden നൽകി */
         html, body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; overflow-x: hidden; width: 100%; }
         *, *::before, *::after { box-sizing: inherit; }
         
@@ -76,7 +75,6 @@
         .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
         .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
         
-        /* മാറ്റം 2: PDF wrapper സ്ക്രീനിൽ നിന്ന് പൂർണ്ണമായും പുറത്തേക്ക് മാറ്റി (left: -9999px) */
         .pdf-wrapper { position: absolute; left: -9999px; top: -9999px; z-index: -9999; opacity: 0; background: white; pointer-events: none; }
         
         .pdf-area-standard { padding: 20px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
@@ -101,7 +99,6 @@
         
         #pdfDeskLabelsArea { width: 800px; padding: 20px; background: white; font-family: Arial; margin: 0 auto; }
         .desk-labels-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-        
         .desk-label-box { width: 31%; min-height: 145px; border: 2px solid #000; padding: 20px; box-sizing: border-box; border-radius: 8px; background: white; page-break-inside: avoid; break-inside: avoid; margin-bottom: 15px; }
         .desk-label-box p { margin: 8px 0; font-size: 15px; font-weight: bold; }
         
@@ -114,6 +111,32 @@
         .pdf-footer { display: flex; border: 1px solid black; font-size: 13px; font-weight: bold; width: 100%; }
         .pdf-footer-left { width: 30%; border-right: 1px solid black; padding: 10px; text-align: center; background-color: #f0f0f0; }
         .pdf-footer-right { width: 70%; padding: 10px; text-align: center; text-transform: uppercase; }
+
+        /* Progress Report Styles (A4 Landscape) */
+        .pr-a4-landscape { width: 297mm; height: 210mm; background: white; display: flex; box-sizing: border-box; padding: 10mm; gap: 10mm; font-family: 'Times New Roman', serif; }
+        .pr-card { flex: 1; border: 3px double #0f5132; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; position: relative; background: #fffaf0; }
+        .pr-card::before { content: ""; position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px; border: 1px solid #d4af37; pointer-events: none; border-radius: 4px; }
+        .pr-header { text-align: center; margin-bottom: 15px; }
+        .pr-inst-name { font-size: 22px; font-weight: bold; color: #0f5132; margin: 0; text-transform: uppercase; letter-spacing: 1px;}
+        .pr-sub-name { font-size: 11px; font-weight: bold; color: #d4af37; letter-spacing: 2px; margin: 4px 0 8px 0; }
+        .pr-title { font-size: 18px; font-weight: bold; color: #0f5132; border-bottom: 2px solid #d4af37; border-top: 2px solid #d4af37; display: inline-block; padding: 5px 20px; letter-spacing: 1px; }
+        .pr-year { background: #0f5132; color: white; display: inline-block; padding: 3px 15px; border-radius: 15px; font-size: 10px; font-weight: bold; margin-top: 8px; }
+        .pr-info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+        .pr-info-box { border: 1px solid #0f5132; text-align: center; padding: 5px; border-radius: 5px; background: white; }
+        .pr-info-label { font-size: 9px; font-weight: bold; color: #0f5132; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 3px; }
+        .pr-info-val { font-size: 14px; font-weight: bold; color: #1e293b; }
+        .pr-student-name { background: #0f5132; color: white; text-align: center; padding: 6px; font-size: 16px; font-weight: bold; text-transform: uppercase; border-radius: 4px; margin-bottom: 12px; }
+        .pr-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; background: white; }
+        .pr-table th, .pr-table td { border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-size: 12px; font-weight: bold; }
+        .pr-table th { background: #0f5132; color: white; font-size: 10px; text-transform: uppercase; }
+        .pr-table td:nth-child(2) { text-align: left; padding-left: 10px; }
+        .pr-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
+        .pr-sum-box { border: 1px solid #d4af37; text-align: center; padding: 6px; border-radius: 5px; background: white; }
+        .pr-sum-label { font-size: 9px; font-weight: bold; color: #64748b; margin-bottom: 4px; }
+        .pr-sum-val { font-size: 16px; font-weight: bold; color: #0f5132; }
+        .pr-remarks { border: 1px solid #cbd5e1; border-radius: 5px; padding: 10px; font-size: 11px; font-weight: bold; color: #475569; margin-bottom: 15px; background: white; min-height: 40px;}
+        .pr-footer { display: flex; justify-content: space-between; margin-top: auto; padding: 0 10px; }
+        .pr-sign { text-align: center; font-size: 10px; font-weight: bold; color: #0f5132; width: 30%; border-top: 1px solid #0f5132; padding-top: 5px; margin-top: 30px; }
     </style>
 </head>
 <body>
@@ -138,10 +161,8 @@
         </div>
 
         <div id="tab-students" class="tab-content active">
-            
             <div class="card" style="max-width: 900px; margin: 0 auto 30px auto; border-top: 4px solid var(--primary-green);">
                 <h3>Student Registration</h3>
-                
                 <div class="grid-2">
                     <div class="form-group"><label>Name *</label><input type="text" id="studentName" class="form-control" placeholder="Student Name"></div>
                     <div class="form-group"><label>Admission No *</label><input type="text" id="admissionNo" class="form-control" placeholder="Ad. No"></div>
@@ -152,22 +173,18 @@
                     <div class="form-group"><label>Contact No</label><input type="text" id="contactNo" class="form-control" placeholder="Phone Number"></div>
                     <div class="form-group"><label>WhatsApp No</label><input type="text" id="whatsappNo" class="form-control" placeholder="WhatsApp Number"></div>
                 </div>
-                
-                <div class="mt-3" style="text-align: right;">
-                    <button class="btn-custom btn-primary-custom btn-auto" id="addStudentBtn" style="min-width: 200px;">Save Student Data</button>
-                </div>
+                <div class="mt-3" style="text-align: right;"><button class="btn-custom btn-primary-custom btn-auto" id="addStudentBtn" style="min-width: 200px;">Save Student Data</button></div>
 
                 <div class="divider-text"><span>Or Bulk Add via Excel</span></div>
-
                 <div class="excel-box">
                     <div class="form-group mx-auto" style="max-width: 400px; text-align: left;">
                         <label>Upload Student Excel File</label>
                         <input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls">
                     </div>
                     <p style="font-size: 13px; color: #e74c3c; font-weight: bold; margin-top: 10px; line-height: 1.6;">
-    നിർബന്ധമായും വേണ്ട കോളങ്ങൾ: Name, AdmissionNo <br>
-    <span style="color: #475569; font-weight: normal; font-size: 12px;">(മറ്റു വിവരങ്ങൾ നൽകണമെങ്കിൽ എക്സൽ കോളത്തിന്റെ പേര് കൃത്യമായി ഇങ്ങനെ തന്നെ നൽകുക: Gender, DOB, FatherName, Place, ContactNo, WhatsappNo)</span>
-</p>
+                    നിർബന്ധമായും വേണ്ട കോളങ്ങൾ: Name, AdmissionNo <br>
+                    <span style="color: #475569; font-weight: normal; font-size: 12px;">(മറ്റു വിവരങ്ങൾ നൽകണമെങ്കിൽ എക്സൽ കോളത്തിന്റെ പേര് കൃത്യമായി ഇങ്ങനെ തന്നെ നൽകുക: Gender, DOB, FatherName, Place, ContactNo, WhatsappNo)</span>
+                    </p>
                     <button class="btn-custom btn-primary-custom btn-auto" id="uploadStudentExcelBtn">Upload Excel Data</button>
                 </div>
             </div>
@@ -190,7 +207,6 @@
         </div>
 
         <div id="tab-marks" class="tab-content">
-            
             <div class="card" style="border-top: 4px solid var(--primary-green);">
                 <h3>Manage Class Subjects & Marks</h3>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -202,35 +218,44 @@
                 <div id="subjectTagsContainer" style="margin-top: 15px;"></div>
             </div>
 
+            <!-- 🛠️ Exam Configuration with Total Attendance -->
             <div class="card">
                 <h3>Exam Configuration</h3>
-                <div class="form-group" style="max-width: 300px;">
-                    <label>Exam Term</label>
-                    <select id="examTerm" class="form-control">
-                        <option value="Monthly Test">Monthly Test</option>
-                        <option value="Quarterly Exam">Quarterly Exam</option>
-                        <option value="Half Yearly Exam">Half Yearly Exam</option>
-                        <option value="Annual Exam">Annual Exam</option>
-                    </select>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="form-group" style="min-width: 200px; margin-bottom: 0;">
+                        <label>Exam Term</label>
+                        <select id="examTerm" class="form-control">
+                            <option value="Monthly Test">Monthly Test</option>
+                            <option value="Quarterly Exam">Quarterly Exam</option>
+                            <option value="Half Yearly Exam">Half Yearly Exam</option>
+                            <option value="Annual Exam">Annual Exam</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
+                        <label>Total Working Days (ആകെ ഹാജർ)</label>
+                        <input type="number" id="classTotalAttendance" class="form-control" placeholder="E.g., 77">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <button class="btn-custom btn-primary-custom btn-auto" id="saveTotalAttBtn" style="padding: 10px 15px;">Save Total Days</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- മാർക്ക് നൽകാനുള്ള പ്രധാന ഭാഗം -->
             <div class="grid-2">
-                
-                <!-- ഇടതുവശം: Manual Mark Entry -->
                 <div class="card">
                     <h3>Manual Mark Entry</h3>
                     <div class="form-group"><label>Select Student</label><select id="markStudentSelect" class="form-control"><option value="">-- Select Student --</option></select></div>
-                    <div class="form-group"><label>Attendance</label><input type="number" id="attendanceInput" class="form-control" placeholder="Days Present"></div>
+                    
+                    <div class="form-group">
+                        <label>Days Present (ഹാജരായ ദിവസങ്ങൾ)</label>
+                        <input type="number" id="attendanceInput" class="form-control" placeholder="Present">
+                    </div>
+                    
                     <div id="dynamicSubjectInputs"></div>
                     <button class="btn-custom btn-primary-custom" id="saveMarksBtn" style="margin-top: 15px;">Save Marks</button>
                 </div>
 
-                <!-- വലതുവശം: Bulk Upload & Transfer Marks -->
                 <div style="display: flex; flex-direction: column; gap: 20px;">
-                    
-                    <!-- 1. Bulk Upload Box -->
                     <div class="card" style="margin-bottom: 0;">
                         <h3>Bulk Upload Marks (Excel)</h3>
                         <div class="form-group"><label>Upload Marks Excel File</label><input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls"></div>
@@ -240,7 +265,6 @@
                         <button class="btn-custom btn-primary-custom" id="uploadMarksExcelBtn">Upload Marks</button>
                     </div>
 
-                    <!-- 2. Transfer Marks Box -->
                     <div class="card" style="background-color: #fef9c3; border: 1px solid #fef08a; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 0;">
                         <h3 style="text-align: center; color: #854d0e; border: none; font-size: 16px; font-weight: bold; margin-bottom: 20px; line-height: 1.5; padding-bottom: 0;">
                             തെറ്റായ എക്സാമിൽ നൽകിയ <br> മാർക്കുകൾ മാറ്റാൻ (Transfer Marks)
@@ -249,42 +273,32 @@
                             <div style="flex: 1; min-width: 140px;">
                                 <select id="transferFromTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
                                     <option value="" disabled selected>From (മാറ്റേണ്ടത്)</option>
-                                    <option value="Monthly Test">Monthly Test</option>
-                                    <option value="Quarterly Exam">Quarterly Exam</option>
-                                    <option value="Half Yearly Exam">Half Yearly Exam</option>
-                                    <option value="Annual Exam">Annual Exam</option>
+                                    <option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
                                 </select>
                             </div>
                             <div style="flex: 1; min-width: 140px;">
                                 <select id="transferToTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
                                     <option value="" disabled selected>To (ശരിയായത്)</option>
-                                    <option value="Monthly Test">Monthly Test</option>
-                                    <option value="Quarterly Exam">Quarterly Exam</option>
-                                    <option value="Half Yearly Exam">Half Yearly Exam</option>
-                                    <option value="Annual Exam">Annual Exam</option>
+                                    <option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
                                 </select>
                             </div>
                         </div>
                         <button id="moveMarksBtn" class="btn-custom" style="background-color: #f59e0b; color: white; width: 100%; font-size: 16px; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer;">Move Marks</button>
                     </div>
-
-                </div> <!-- വലതുവശത്തെ ഭാഗം അവസാനിക്കുന്നു -->
-                
-            </div> <!-- grid-2 അവസാനിക്കുന്നു -->
-            
+                </div>
+            </div>
         </div>
         
         <div id="tab-results" class="tab-content">
-            
             <div class="card">
                 <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
                     <h3 style="border:none; margin:0; padding:0;">Results Overview</h3>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <button class="btn-custom btn-auto btn-small" id="copyResultLinkBtn" style="background-color: #10b981; color: white;">🔗 Copy Public Result Link</button>
-                        
                         <button class="btn-custom btn-primary-custom btn-auto btn-small" id="downloadDetailedPdfBtn">Download Marklist</button>
-                        <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadNoticeBoardPdfBtn">Download Notice Board (Portrait)</button>
+                        <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadNoticeBoardPdfBtn">Download Notice Board</button>
                         <button class="btn-custom btn-warning-custom btn-auto btn-small" id="downloadDeskLabelsBtn">Download Desk Labels</button>
+                        <button class="btn-custom btn-auto btn-small" id="downloadProgressReportBtn" style="background-color: #0f5132; color: white;">Download Progress Report (A4)</button>
                     </div>
                 </div>
                 
@@ -307,7 +321,6 @@
                 </div>
             </div>
 
-            <!-- 🛠️ Result Publish Management Box (പുതിയ കോഡ്) -->
             <div class="card" style="margin-top: 20px; border-top: 4px solid var(--primary-dark);">
                 <h3 style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
                     Result Publish Management 
@@ -318,41 +331,25 @@
                 </p>
                 
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
-                    
                     <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Select Term to Manage</label>
                         <select id="publishTerm" class="form-control">
-                            <option value="" disabled selected>-- Select Exam --</option>
-                            <option value="Monthly Test">Monthly Test</option>
-                            <option value="Quarterly Exam">Quarterly Exam</option>
-                            <option value="Half Yearly Exam">Half Yearly Exam</option>
-                            <option value="Annual Exam">Annual Exam</option>
+                            <option value="" disabled selected>-- Select Exam --</option><option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
                         </select>
                     </div>
-                    
                     <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Action (Status)</label>
-                        <select id="publishStatus" class="form-control">
-                            <option value="published">Publish (Visible to Students)</option>
-                            <option value="hidden">Hide (Keep Private)</option>
-                        </select>
+                        <select id="publishStatus" class="form-control"><option value="published">Publish (Visible to Students)</option><option value="hidden">Hide (Keep Private)</option></select>
                     </div>
-                    
                     <div style="flex: 1; min-width: 200px;">
                         <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Auto-Publish Date & Time</label>
                         <input type="datetime-local" id="publishDateTime" class="form-control">
                     </div>
-                    
                 </div>
                 
                 <p id="publishStatusText" style="font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 15px;"></p>
-                
-                <button id="savePublishSettingsBtn" class="btn-custom btn-primary-custom" style="width: 100%; font-size: 15px; padding: 12px; background-color: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                    Save & Sync Cache
-                </button>
+                <button id="savePublishSettingsBtn" class="btn-custom btn-primary-custom" style="width: 100%; font-size: 15px; padding: 12px; background-color: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">Save & Sync Cache</button>
             </div>
-            <!-- 🛠️ Result Publish Management ഇവിടെ അവസാനിക്കുന്നു -->
-
         </div>
 
         <div id="tab-upgrade" class="tab-content">
@@ -365,6 +362,7 @@
         </div>
     </div>
 
+    <!-- Modals & PDF Wrappers -->
     <div class="modal fade" id="editStudentModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit Student</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
           <div class="modal-body">
@@ -382,43 +380,19 @@
       </div></div>
     </div>
 
-    <div class="pdf-wrapper" id="pdfDetailedWrapper">
-        <div id="pdfExportArea" class="pdf-area-standard">
-            <div class="pdf-header"><h1 id="pdfMadrasaName1">MADRASA</h1><h2 id="pdfExamTitle1">EXAM</h2></div>
-            <table class="pdf-table"><thead id="pdfThead1"></thead><tbody id="pdfTbody1"></tbody></table>
-            <div class="pdf-summary-container">
-                <table class="pdf-summary-box"><thead><tr><th colspan="3">TOTAL STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfTot1"><td>0</td><td>0</td><td>0</td></tr></tbody></table>
-                <table class="pdf-summary-box"><thead><tr><th colspan="3">PASSED STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPass1"><td>0</td><td>0</td><td>0</td></tr></tbody></table>
-                <table class="pdf-summary-box"><thead><tr><th colspan="3">PERCENTAGE</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPerc1"><td>0%</td><td>0%</td><td>0%</td></tr></tbody></table>
-            </div>
-            <div class="pdf-footer"><div class="pdf-footer-left">MUALLIM NAME</div><div class="pdf-footer-right" id="pdfTeacherName1">TEACHER</div></div>
-        </div>
-    </div>
+    <div class="pdf-wrapper" id="pdfDetailedWrapper"><div id="pdfExportArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName1">MADRASA</h1><h2 id="pdfExamTitle1">EXAM</h2></div><table class="pdf-table"><thead id="pdfThead1"></thead><tbody id="pdfTbody1"></tbody></table><div class="pdf-summary-container"><table class="pdf-summary-box"><thead><tr><th colspan="3">TOTAL STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfTot1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PASSED STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPass1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PERCENTAGE</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPerc1"><td>0%</td><td>0%</td><td>0%</td></tr></tbody></table></div><div class="pdf-footer"><div class="pdf-footer-left">MUALLIM NAME</div><div class="pdf-footer-right" id="pdfTeacherName1">TEACHER</div></div></div></div>
 
-    <div class="pdf-wrapper" id="pdfNoticeBoardWrapper">
-        <div id="pdfNoticeBoardArea" class="pdf-area-standard">
-            <div class="pdf-header"><h1 id="pdfMadrasaName2">MADRASA</h1><h2 id="pdfExamTitle2">EXAM</h2></div>
-            <table class="nb-table"><thead id="pdfThead2"></thead><tbody id="pdfTbody2"></tbody></table>
-        </div>
-    </div>
+    <div class="pdf-wrapper" id="pdfNoticeBoardWrapper"><div id="pdfNoticeBoardArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName2">MADRASA</h1><h2 id="pdfExamTitle2">EXAM</h2></div><table class="nb-table"><thead id="pdfThead2"></thead><tbody id="pdfTbody2"></tbody></table></div></div>
 
-    <div class="pdf-wrapper" id="pdfDeskLabelsWrapper">
-        <div id="pdfDeskLabelsArea">
-            <div class="desk-labels-grid" id="deskLabelsGrid"></div>
-        </div>
-    </div>
+    <div class="pdf-wrapper" id="pdfDeskLabelsWrapper"><div id="pdfDeskLabelsArea"><div class="desk-labels-grid" id="deskLabelsGrid"></div></div></div>
 
-    <div class="pdf-wrapper" id="pdfStudentListWrapper">
-        <div id="pdfStudentListArea" class="pdf-area-standard">
-            <div class="pdf-header"><h1 id="pdfMadrasaName4">MADRASA</h1><h2 id="pdfClassTitle4">CLASS STUDENTS</h2></div>
-            <table class="nb-table">
-                <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead>
-                <tbody id="pdfStudentListBody"></tbody>
-            </table>
-        </div>
+    <div class="pdf-wrapper" id="pdfStudentListWrapper"><div id="pdfStudentListArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName4">MADRASA</h1><h2 id="pdfClassTitle4">CLASS STUDENTS</h2></div><table class="nb-table"><thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead><tbody id="pdfStudentListBody"></tbody></table></div></div>
+
+    <div class="pdf-wrapper" id="pdfProgressReportWrapper">
+        <div id="prPrintContainer" class="pr-a4-landscape"></div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-   <script type="module" src="teacher_dashboard.js"></script>
+    <script type="module" src="teacher_dashboard.js"></script>
 </body>
 </html>
