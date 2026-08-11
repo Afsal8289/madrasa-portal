@@ -820,4 +820,46 @@ document.getElementById("processUpgradeBtn")?.addEventListener("click", async ()
     } catch (error) { console.error("Upgrade Error:", error); alert("An error occurred while upgrading."); } finally { btn.textContent = originalText; btn.disabled = false; }
 });
 
+// 🛠️ ADD SUBJECT BUTTON FIX
+document.getElementById("addSubjectBtn")?.addEventListener("click", async () => {
+    const name = document.getElementById("newSubjectName").value.trim().toUpperCase();
+    const maxMark = parseInt(document.getElementById("newSubjectMaxMark").value);
+    const passMark = parseInt(document.getElementById("newSubjectPassMark").value);
+
+    if (!name || isNaN(maxMark) || isNaN(passMark)) {
+        return alert("ദയവായി ശരിയായ Subject Name, Max Mark, Pass Mark എന്നിവ നൽകുക.");
+    }
+    
+    const exists = state.classSubjects.some(s => s.name.toUpperCase() === name);
+    if (exists) return alert(`'${name}' എന്ന സബ്ജക്ട് നേരത്തെ തന്നെ ആഡ് ചെയ്തിട്ടുണ്ട്!`);
+
+    const btn = document.getElementById("addSubjectBtn");
+    const originalText = btn.textContent; 
+    btn.textContent = "Adding..."; btn.disabled = true;
+
+    try {
+        state.classSubjects.push({ name, maxMark, passMark });
+        await network.withRetry(() => setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { 
+            subjects: state.classSubjects, 
+            muallimName: state.classMuallimName 
+        }, { merge: true }));
+        
+        // Input fields ക്ലിയർ ചെയ്യാൻ
+        document.getElementById("newSubjectName").value = ""; 
+        document.getElementById("newSubjectMaxMark").value = ""; 
+        document.getElementById("newSubjectPassMark").value = "";
+        
+        utils.safeSetCache(`cache_subs_${state.assignedClass}`, { subjects: state.classSubjects, muallimName: state.classMuallimName });
+        await triggerCacheUpdate();
+        renderSubjectsUI();
+        loadResults();
+    } catch (e) {
+        console.error("Error adding subject:", e);
+        alert("സബ്ജക്ട് സേവ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു.");
+        state.classSubjects.pop(); // എറർ വന്നാൽ തിരിച്ച് പഴയത് പോലെ ആക്കാൻ
+    } finally {
+        btn.textContent = originalText; btn.disabled = false;
+    }
+});
+
 checkAuth(async (user) => { state.teacherUid = user.uid; editModalInstance = new bootstrap.Modal(document.getElementById('editStudentModal')); setupTabs(); await loadTeacherData(); });
