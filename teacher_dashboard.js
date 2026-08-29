@@ -9,10 +9,10 @@ import { doc, getDoc, collection, getDocs, query, where, setDoc, updateDoc, onSn
 let state = {
     teacherUid: "", assignedClass: "", madrasaUid: "", madrasaNameGlobal: "MADRASA", teacherNameGlobal: "TEACHER",
     customMadrasaId: "", classSubjects: [], studentsMap: {}, classMuallimName: "", isSmartCacheValid: false, isEditModeActive: false,
-    termTotalAttendance: {} // 🛠️ പുതിയ കൂട്ടിച്ചേർക്കൽ
+    termTotalAttendance: {}
 };
 
-let editModalInstance = null; let unsubscribeMeta = null;
+let unsubscribeMeta = null;
 
 const DOM = { madrasaName: document.getElementById("displayMadrasaName"), className: document.getElementById("displayClassName"), logoutBtn: document.getElementById("logoutBtn") };
 DOM.logoutBtn.addEventListener("click", logoutUser);
@@ -38,8 +38,7 @@ function setupRealtimeSync() {
         if (docSnap.exists()) {
             const data = docSnap.data();
             const serverTime = data.lastUpdate || 0; const localTime = utils.safeGetCache(`smart_time_${state.assignedClass}`);
-            if (data.termTotalAttendance) state.termTotalAttendance = data.termTotalAttendance; // 🛠️ Update attendance from server
-            
+            if (data.termTotalAttendance) state.termTotalAttendance = data.termTotalAttendance; 
             if (serverTime > 0 && String(serverTime) !== String(localTime)) {
                 utils.safeSetCache(`smart_time_${state.assignedClass}`, serverTime); state.isSmartCacheValid = true;
                 loadStudents(true); loadResults(true);
@@ -54,7 +53,7 @@ async function verifySmartCache() {
         const metaDoc = await network.withRetry(() => getDoc(doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`)));
         if (metaDoc.exists()) {
             const data = metaDoc.data();
-            if (data.termTotalAttendance) state.termTotalAttendance = data.termTotalAttendance; // 🛠️ Load total attendance
+            if (data.termTotalAttendance) state.termTotalAttendance = data.termTotalAttendance; 
             const serverTime = data.lastUpdate || 0; const localTime = utils.safeGetCache(`smart_time_${state.assignedClass}`);
             state.isSmartCacheValid = (serverTime > 0 && String(serverTime) === String(localTime));
             if (!state.isSmartCacheValid) utils.safeSetCache(`smart_time_${state.assignedClass}`, serverTime);
@@ -77,14 +76,34 @@ async function loadTeacherData() {
         if (!tData) { const docSnap = await network.withRetry(() => getDoc(doc(db, "users", state.teacherUid))); if (!docSnap.exists()) return; tData = docSnap.data(); utils.safeSetCache(`cache_user_${state.teacherUid}`, tData); }
         state.assignedClass = localStorage.getItem('teacherCurrentClass') || (Array.isArray(tData.assignedClass) ? tData.assignedClass[0] : String(tData.assignedClass));
         state.madrasaUid = tData.madrasaUid; state.teacherNameGlobal = tData.name;
+        
         await verifySmartCache(); 
+        
         let adminData = utils.safeGetCache(`cache_admin_${state.madrasaUid}`);
         if (!state.isSmartCacheValid || !adminData) {
             const adminDoc = await network.withRetry(() => getDoc(doc(db, "users", state.madrasaUid)));
-            if (adminDoc.exists()) { adminData = { madrasaNameGlobal: adminDoc.data().madrasaName || "MADRASA", customMadrasaId: adminDoc.data().madrasaId || state.madrasaUid }; utils.safeSetCache(`cache_admin_${state.madrasaUid}`, adminData); }
+            if (adminDoc.exists()) { 
+                adminData = { 
+                    madrasaNameGlobal: adminDoc.data().madrasaName || "MADRASA", 
+                    customMadrasaId: adminDoc.data().madrasaId || state.madrasaUid,
+                    classes: adminDoc.data().classes || []
+                }; 
+                utils.safeSetCache(`cache_admin_${state.madrasaUid}`, adminData); 
+            }
         }
         state.madrasaNameGlobal = adminData.madrasaNameGlobal; state.customMadrasaId = adminData.customMadrasaId;
         DOM.madrasaName.textContent = state.madrasaNameGlobal; DOM.className.textContent = state.assignedClass;
+
+        // 🛠️ UPGRADE DROPDOWN CLASS FIX (Sorted Order)
+        const upgradeSelect = document.getElementById("upgradeTargetClass");
+        if(upgradeSelect && adminData && adminData.classes) {
+            upgradeSelect.innerHTML = '<option value="">-- Select Target Class --</option>';
+            // Sorts classes accurately including letters and numbers (e.g., 1, 1A, 2, 10)
+            let sortedClasses = [...adminData.classes].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+            sortedClasses.forEach(cls => {
+                upgradeSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
+            });
+        }
 
         let subData = utils.safeGetCache(`cache_subs_${state.assignedClass}`);
         if (!state.isSmartCacheValid || !subData) {
@@ -101,7 +120,6 @@ async function loadTeacherData() {
         if (document.getElementById("examTerm")) document.getElementById("examTerm").value = activeExamTerm;
         if (document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = activeExamTerm;
         
-        // 🛠️ Update Total Attendance input based on current term
         const totalAttInput = document.getElementById("classTotalAttendance");
         if (totalAttInput) totalAttInput.value = state.termTotalAttendance[activeExamTerm] || "";
             
@@ -159,7 +177,7 @@ async function loadUpgradeStudents() {
         upgradeBody.innerHTML = students.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No students found</td></tr>' : "";
         students.forEach(st => {
             const color = (st.gender === "Female") ? "#d32f2f" : "#000000";
-            upgradeBody.innerHTML += `<tr><td><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td><td style="color:${color};">${st.admissionNo}</td><td style="color:${color};">${st.name}</td><td style="color:${color};">${st.gender}</td></tr>`;
+            upgradeBody.innerHTML += `<tr><td style="text-align: center;"><input type="checkbox" class="upgrade-checkbox" value="${st.id}"></td><td style="color:${color};">${st.admissionNo}</td><td style="color:${color};">${st.name}</td><td style="color:${color};">${st.gender}</td></tr>`;
         });
     } catch (e) { console.error(e); }
 }
@@ -168,17 +186,22 @@ async function loadResults(isSilent = false) {
     const term = document.getElementById("viewResultTerm")?.value;
     if (!term || !state.assignedClass || !state.madrasaUid) return;
     
-    let ths = `<tr><th>Roll No</th><th>Ad.No</th><th>Name</th><th>Att.</th>`;
+    let ths = `<tr>
+        <th style="vertical-align:bottom;">Roll</th>
+        <th style="vertical-align:bottom;">Ad.No</th>
+        <th style="vertical-align:bottom;">Name</th>
+        <th class="vert-hdr">Att.</th>`;
+        
     let pdfThs1 = `<tr><th class="vertical-header"><span>ROLL NO</span></th><th class="vertical-header"><span>AD.NO</span></th><th class="name-col" style="vertical-align:middle;">NAME OF STUDENTS</th><th class="vertical-header"><span>HAJAR</span></th>`;
     let pdfThs2 = pdfThs1;
     
     state.classSubjects.forEach(sub => {
-        ths += `<th>${sub.name}</th>`;
+        ths += `<th class="vert-hdr">${sub.name}</th>`; // Screen Vertical Header
         pdfThs1 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
         pdfThs2 += `<th class="vertical-header"><span>${sub.name.toUpperCase()}</span></th>`;
     });
     
-    ths += `<th>Total</th><th>Rank</th><th>Grade</th><th>Status</th><th>Action</th></tr>`;
+    ths += `<th class="vert-hdr">Total</th><th class="vert-hdr">Rank</th><th class="vert-hdr">Grade</th><th style="vertical-align:bottom;">Status</th><th style="vertical-align:bottom;">Action</th></tr>`;
     pdfThs1 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
     pdfThs2 += `<th class="vertical-header"><span>TOTAL</span></th><th class="vertical-header"><span>RANK</span></th><th class="vertical-header"><span>REMARKS</span></th></tr>`;
     
@@ -238,7 +261,8 @@ function renderResultsTable(results, term) {
             const mark = res.marks?.[sub.name] ?? "";
             const isFail = mark === "A" || (mark !== "" && Number(mark) < (sub.passMark || 35));
             const mColor = isFail ? "#d32f2f" : "#000000";
-            marksHTML += `<td style="color: ${mColor};">${mark}</td>`; marksHTMLPdf += `<td style="color: ${mColor};">${mark}</td>`;
+            marksHTML += `<td style="color: ${mColor}; font-weight: bold;">${mark}</td>`; 
+            marksHTMLPdf += `<td style="color: ${mColor};">${mark}</td>`;
         });
         
         let displayGrade = res.grade || "";
@@ -253,11 +277,10 @@ function renderResultsTable(results, term) {
         }
 
         const actionBtn = res.isPlaceholder ? "" : `<div style="display: flex; gap: 6px; justify-content: center; align-items: center;"><button class="btn-custom btn-warning-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.editMark('${res.studentId}', '${term}')">Edit</button> <button class="btn-custom btn-danger-custom btn-small" style="padding: 4px 10px; font-size: 12px; min-width: 50px;" onclick="window.deleteMark('${res.id}', '${term}')">Del</button></div>`;
-        
-        // 🛠️ മാർക്ക് ലിസ്റ്റിൽ പഴയതുപോലെ പ്രസന്റ് ആയ ദിവസങ്ങൾ മാത്രം കാണിക്കുന്നു
         const attendanceDisp = (res.attendance && res.attendance !== "-") ? res.attendance : "";
 
-        html += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td style="color:${color};">${res.studentName}</td><td>${attendanceDisp}</td>${marksHTML}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td><td style="color:${statusColor}; font-weight:bold;">${statusText}</td><td>${actionBtn}</td></tr>`;
+        html += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td style="color:${color}; font-weight: 500;">${res.studentName}</td><td>${attendanceDisp}</td>${marksHTML}<td style="font-weight:bold;">${res.totalMarks || ""}</td><td style="font-weight:bold;">${res.rank || ""}</td><td style="font-weight:bold;">${displayGrade}</td><td style="color:${statusColor}; font-weight:bold;">${statusText}</td><td>${actionBtn}</td></tr>`;
+        
         pdfHtml1 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td class="name-col" style="color:${color};">${res.studentName.toUpperCase()}</td><td>${attendanceDisp}</td>${marksHTMLPdf}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
         pdfHtml2 += `<tr><td style="color:${color};">${roll}</td><td style="color:${color};">${st?.admissionNo || "-"}</td><td class="name-col" style="text-align:left; color:${color};">${res.studentName.toUpperCase()}</td><td>${attendanceDisp}</td>${marksHTMLPdf}<td>${res.totalMarks || ""}</td><td>${res.rank || ""}</td><td style="color:${statusColor}; font-weight:bold;">${pdfPassText}</td></tr>`;
     });
@@ -332,7 +355,7 @@ function setupTabs() {
     document.querySelectorAll(".tab-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
             document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active")); document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            const target = e.target.getAttribute("data-tab"); e.target.classList.add("active"); document.getElementById(target).classList.add("active");
+            const target = e.currentTarget.getAttribute("data-tab"); e.currentTarget.classList.add("active"); document.getElementById(target).classList.add("active");
             if(target === "tab-results") loadResults(); if(target === "tab-upgrade") loadUpgradeStudents(); if(target === "tab-marks") state.isEditModeActive = false; 
         });
     });
@@ -343,40 +366,60 @@ function renderSubjectsUI() {
     if(tagsContainer) {
         tagsContainer.innerHTML = "";
         state.classSubjects.forEach(sub => { 
-            tagsContainer.innerHTML += `<div class="subject-tag">${sub.name} <span style="color:#0ea5e9; font-size:11px;">(${sub.passMark}/${sub.maxMark})</span><button style="background:none; border:none; color:#f59e0b; cursor:pointer; font-weight:bold; font-size:14px; margin-left:4px; padding:0;" onclick="window.editSubject('${sub.name}', ${sub.maxMark}, ${sub.passMark})" title="Edit Subject">✎</button><button class="delete-sub-btn" onclick="window.deleteSubject('${sub.name}')" title="Delete Subject">X</button></div>`; 
+            tagsContainer.innerHTML += `<div class="subject-tag">${sub.name} <span style="color:#0ea5e9; font-size:11px; margin-left:4px;">(${sub.passMark}/${sub.maxMark})</span><button style="background:none; border:none; color:#f59e0b; cursor:pointer; font-weight:bold; font-size:14px; margin-left:8px; padding:0;" onclick="window.editSubject('${sub.name}', ${sub.maxMark}, ${sub.passMark})" title="Edit">✎</button><button class="delete-sub-btn" onclick="window.deleteSubject('${sub.name}')" title="Delete">X</button></div>`; 
         });
     }
     const inputsContainer = document.getElementById("dynamicSubjectInputs");
     if(inputsContainer) {
-        inputsContainer.innerHTML = state.classSubjects.length === 0 ? "<p>No subjects added.</p>" : "";
-        state.classSubjects.forEach(sub => { inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} (Max: ${sub.maxMark})</label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Mark"></div>`; });
-        if(state.classSubjects.length > 0) { inputsContainer.innerHTML += `<div class="form-group mt-3" style="background: #e0f2fe; padding: 12px; border-radius: 6px; border: 1px solid #bae6fd;"><label style="display: flex; align-items: center; gap: 8px; margin: 0; color: #0369a1; font-weight: bold; cursor: pointer; font-size: 14px;"><input type="checkbox" id="forcePromoteCheck" style="width: 18px; height: 18px; cursor: pointer;"> Force Promote Student (Without entering marks)</label></div>`; }
+        inputsContainer.innerHTML = state.classSubjects.length === 0 ? "<p class='text-muted small'>No subjects added.</p>" : "";
+        state.classSubjects.forEach(sub => { inputsContainer.innerHTML += `<div class="form-group"><label>${sub.name} <span class="text-primary">(Max: ${sub.maxMark})</span></label><input type="text" class="form-control mark-input" data-subject="${sub.name}" placeholder="Enter Mark"></div>`; });
+        if(state.classSubjects.length > 0) { 
+            inputsContainer.innerHTML += `<div class="form-check mt-3 mb-3 p-3 rounded" style="background:#e0f2fe; border:1px solid #bae6fd;">
+                <input type="checkbox" id="forcePromoteCheck" class="form-check-input ms-0 me-2" style="width:18px;height:18px;cursor:pointer;">
+                <label class="form-check-label fw-bold text-primary" for="forcePromoteCheck" style="cursor:pointer;">Force Promote Student (Without entering marks)</label>
+            </div>`; 
+        }
     }
 }
 
-// 🛠️ Save Total Attendance Event Listener
+document.getElementById("addSubjectBtn")?.addEventListener("click", async () => {
+    const name = document.getElementById("newSubjectName").value.trim().toUpperCase();
+    const maxMark = parseInt(document.getElementById("newSubjectMaxMark").value);
+    const passMark = parseInt(document.getElementById("newSubjectPassMark").value);
+
+    if (!name || isNaN(maxMark) || isNaN(passMark)) {
+        return alert("ദയവായി ശരിയായ Subject Name, Max Mark, Pass Mark എന്നിവ നൽകുക.");
+    }
+    const exists = state.classSubjects.some(s => s.name.toUpperCase() === name);
+    if (exists) return alert(`'${name}' എന്ന സബ്ജക്ട് നേരത്തെ തന്നെ ആഡ് ചെയ്തിട്ടുണ്ട്!`);
+
+    const btn = document.getElementById("addSubjectBtn");
+    const originalText = btn.innerHTML; 
+    btn.textContent = "Wait.."; btn.disabled = true;
+
+    try {
+        state.classSubjects.push({ name, maxMark, passMark });
+        await network.withRetry(() => setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { subjects: state.classSubjects, muallimName: state.classMuallimName }, { merge: true }));
+        document.getElementById("newSubjectName").value = ""; document.getElementById("newSubjectMaxMark").value = ""; document.getElementById("newSubjectPassMark").value = "";
+        utils.safeSetCache(`cache_subs_${state.assignedClass}`, { subjects: state.classSubjects, muallimName: state.classMuallimName });
+        await triggerCacheUpdate(); renderSubjectsUI(); loadResults();
+    } catch (e) {
+        alert("സബ്ജക്ട് സേവ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു."); state.classSubjects.pop(); 
+    } finally { btn.innerHTML = originalText; btn.disabled = false; }
+});
+
 document.getElementById("saveTotalAttBtn")?.addEventListener("click", async () => {
     const term = document.getElementById("examTerm").value;
     const val = document.getElementById("classTotalAttendance").value;
     if(!term) return;
-    
     const btn = document.getElementById("saveTotalAttBtn");
-    const originalText = btn.textContent;
-    btn.textContent = "Saving..."; btn.disabled = true;
-
+    const originalText = btn.innerHTML; btn.textContent = "Saving..."; btn.disabled = true;
     try {
         const metaRef = doc(db, "class_meta", `${state.madrasaUid}_${state.assignedClass}`);
-        state.termTotalAttendance = state.termTotalAttendance || {};
-        state.termTotalAttendance[term] = val;
+        state.termTotalAttendance = state.termTotalAttendance || {}; state.termTotalAttendance[term] = val;
         await setDoc(metaRef, { termTotalAttendance: state.termTotalAttendance }, { merge: true });
-        alert(`Total Working Days (${val}) saved for ${term}!`);
-        await triggerCacheUpdate();
-    } catch (e) {
-        console.error("Error saving total attendance:", e);
-        alert("Failed to save total attendance.");
-    } finally {
-        btn.textContent = originalText; btn.disabled = false;
-    }
+        alert(`Total Working Days (${val}) saved for ${term}!`); await triggerCacheUpdate();
+    } catch (e) { alert("Failed to save total attendance."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
 
@@ -455,6 +498,53 @@ window.deleteStudent = async (studentId) => {
     try { await StudentService.deleteStudentAndMarks(studentId); localStorage.removeItem(`cache_students_${state.assignedClass}`); state.isSmartCacheValid = false; await triggerCacheUpdate(); await loadStudents(); loadResults(); } catch (e) { utils.showError("Failed to delete student.", e); }
 };
 
+window.openEditModal = (studentId) => {
+    const st = state.studentsMap[studentId];
+    if (!st) return;
+    
+    document.getElementById("editStudentId").value = studentId;
+    document.getElementById("editName").value = st.name || "";
+    document.getElementById("editAdNo").value = st.admissionNo || "";
+    document.getElementById("editGender").value = st.gender || "Male";
+    document.getElementById("editDob").value = st.dob || "";
+    document.getElementById("editFatherName").value = st.fatherName || "";
+    document.getElementById("editPlace").value = st.place || "";
+    document.getElementById("editContactNo").value = st.contactNo || "";
+    document.getElementById("editWhatsappNo").value = st.whatsappNo || "";
+    
+    let modalEl = document.getElementById('editStudentModal');
+    let modalInst = bootstrap.Modal.getInstance(modalEl);
+    if (!modalInst) modalInst = new bootstrap.Modal(modalEl);
+    modalInst.show();
+};
+
+document.getElementById("saveEditStudentBtn")?.addEventListener("click", async () => {
+    const studentId = document.getElementById("editStudentId").value;
+    const updatedData = {
+        name: document.getElementById("editName").value.trim(),
+        admissionNo: document.getElementById("editAdNo").value.trim(),
+        gender: document.getElementById("editGender").value,
+        dob: document.getElementById("editDob").value,
+        fatherName: document.getElementById("editFatherName").value.trim(),
+        place: document.getElementById("editPlace").value.trim(),
+        contactNo: document.getElementById("editContactNo").value.trim(),
+        whatsappNo: document.getElementById("editWhatsappNo").value.trim()
+    };
+    if(!updatedData.name || !updatedData.admissionNo) return alert("Name and Admission No are required.");
+    
+    const btn = document.getElementById("saveEditStudentBtn");
+    btn.disabled = true; btn.textContent = "Saving...";
+    try {
+        await updateDoc(doc(db, "students", studentId), updatedData);
+        let modalEl = document.getElementById('editStudentModal');
+        bootstrap.Modal.getInstance(modalEl).hide();
+        localStorage.removeItem(`cache_students_${state.assignedClass}`);
+        await triggerCacheUpdate(); await loadStudents(); loadResults();
+    } catch(e) { console.error(e); alert("Failed to update student."); }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2"></i> Save Changes'; }
+});
+
+
 document.getElementById("addStudentBtn")?.addEventListener("click", async () => {
     const name = utils.sanitizeInput(document.getElementById("studentName").value); const admissionNo = document.getElementById("admissionNo").value.trim();
     if (!name || !admissionNo) return alert("Name and Admission No are required.");
@@ -465,7 +555,7 @@ document.getElementById("addStudentBtn")?.addEventListener("click", async () => 
         const newStudentData = { name, admissionNo, gender: document.getElementById("gender").value, dob: document.getElementById("dob").value, fatherName: utils.sanitizeInput(document.getElementById("fatherName").value), place: document.getElementById("place").value.trim(), contactNo: document.getElementById("contactNo").value.trim(), whatsappNo: document.getElementById("whatsappNo").value.trim(), className: state.assignedClass, madrasaUid: state.madrasaUid };
         await StudentService.addNewStudent(newStudentData); localStorage.removeItem(`cache_students_${state.assignedClass}`); await triggerCacheUpdate();
         ['studentName', 'admissionNo', 'dob', 'fatherName', 'place', 'contactNo', 'whatsappNo'].forEach(id => document.getElementById(id).value = ""); await loadStudents();
-    } catch (e) { utils.showError("Failed to add student.", e); } finally { utils.enableBtn("addStudentBtn"); }
+    } catch (e) { utils.showError("Failed to add student.", e); } finally { utils.enableBtn("addStudentBtn", '<i class="bi bi-check2-circle"></i> Save Student'); }
 });
 
 if (document.getElementById("markStudentSelect")) {
@@ -482,11 +572,11 @@ if (document.getElementById("markStudentSelect")) {
                 
                 document.querySelectorAll(".mark-input").forEach(inp => { const subName = inp.getAttribute("data-subject"); const mVal = markData.marks && markData.marks[subName] !== undefined ? markData.marks[subName] : ""; inp.value = mVal === "-" ? "" : mVal; });
                 if(forcePromoteCheck) forcePromoteCheck.checked = (markData.status === "Promoted");
-                document.getElementById("saveMarksBtn").textContent = "Update Marks";
+                document.getElementById("saveMarksBtn").innerHTML = '<i class="bi bi-check-circle"></i> Update Marks';
             } else {
                 document.getElementById("attendanceInput").value = ""; 
                 document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
-                if(forcePromoteCheck) forcePromoteCheck.checked = false; document.getElementById("saveMarksBtn").textContent = "Save Marks";
+                if(forcePromoteCheck) forcePromoteCheck.checked = false; document.getElementById("saveMarksBtn").innerHTML = '<i class="bi bi-check-circle"></i> Save Marks';
             }
         } catch (error) { console.error("Error fetching marks:", error); }
     });
@@ -500,13 +590,12 @@ if (document.getElementById("examTerm")) {
         document.getElementById("markStudentSelect").value = ""; 
         document.getElementById("attendanceInput").value = ""; 
         
-        // 🛠️ Update Total Attendance input based on current term
         const totalAttInput = document.getElementById("classTotalAttendance");
         if (totalAttInput) totalAttInput.value = state.termTotalAttendance[newTerm] || "";
 
         document.querySelectorAll(".mark-input").forEach(inp => inp.value = "");
         if(document.getElementById("forcePromoteCheck")) document.getElementById("forcePromoteCheck").checked = false;
-        document.getElementById("saveMarksBtn").textContent = "Save Marks";
+        document.getElementById("saveMarksBtn").innerHTML = '<i class="bi bi-check-circle"></i> Save Marks';
     });
 }
 
@@ -514,12 +603,12 @@ document.getElementById("moveMarksBtn")?.addEventListener("click", async () => {
     const fromTerm = document.getElementById("transferFromTerm")?.value; const toTerm = document.getElementById("transferToTerm")?.value;
     if (!fromTerm || !toTerm) return alert("ദയവായി മാറ്റേണ്ട എക്സാമും (From) ശരിയായ എക്സാമും (To) തിരഞ്ഞെടുക്കുക!");
     if (fromTerm === toTerm) return alert("ഒരേ എക്സാമിലേക്ക് തന്നെ മാറ്റാൻ സാധിക്കില്ല!");
-    if (!confirm(`'${fromTerm}' ലെ മുഴുവൻ മാർക്കുകളും '${toTerm}' ലേക്ക് മാറ്റാൻ (Move) ഉറപ്പാണോ?\n\n(ശ്രദ്ധിക്കുക: '${toTerm}' ൽ നേരത്തെ നൽകിയ മാർക്കുകൾ ഉണ്ടെങ്കിൽ അത് മാഞ്ഞുപോകും, കൂടാതെ '${fromTerm}' ലെ പഴയ മാർക്കുകൾ പൂർണ്ണമായും ഡിലീറ്റ് ആവുകയും ചെയ്യും)`)) return;
+    if (!confirm(`'${fromTerm}' ലെ മുഴുവൻ മാർക്കുകളും '${toTerm}' ലേക്ക് മാറ്റാൻ ഉറപ്പാണോ?\n\n(ശ്രദ്ധിക്കുക: പഴയ മാർക്കുകൾ ഡിലീറ്റ് ആവുകയും പുതിയതിലേക്ക് മാവുകയും ചെയ്യും)`)) return;
     
-    const btn = document.getElementById("moveMarksBtn"); const originalText = btn.textContent; btn.textContent = "Moving Data..."; btn.disabled = true;
+    const btn = document.getElementById("moveMarksBtn"); const originalText = btn.innerHTML; btn.innerHTML = "Moving Data..."; btn.disabled = true;
     try {
         const snap = await network.withRetry(() => getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass), where("term", "==", fromTerm))));
-        if(snap.empty) { btn.textContent = originalText; btn.disabled = false; return alert(`'${fromTerm}' ലെ പേരിൽ കുട്ടികൾക്ക് മാർക്കുകൾ ഒന്നും നൽകിയതായി കാണുന്നില്ല!`); }
+        if(snap.empty) { btn.innerHTML = originalText; btn.disabled = false; return alert(`'${fromTerm}' ൽ മാർക്കുകൾ ഒന്നും കാണുന്നില്ല!`); }
         
         let batches = []; let currentBatch = writeBatch(db); let count = 0;
         snap.docs.forEach(markDoc => {
@@ -536,7 +625,7 @@ document.getElementById("moveMarksBtn")?.addEventListener("click", async () => {
         const studentSelect = document.getElementById("markStudentSelect"); if(studentSelect) { studentSelect.value = ""; studentSelect.dispatchEvent(new Event('change')); }
         if(document.getElementById("viewResultTerm")) document.getElementById("viewResultTerm").value = toTerm; if(document.getElementById("examTerm")) document.getElementById("examTerm").value = toTerm;
         loadResults();
-    } catch (e) { utils.showError("Error moving marks.", e); } finally { btn.textContent = originalText; btn.disabled = false; }
+    } catch (e) { utils.showError("Error moving marks.", e); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
 if (document.getElementById("viewResultTerm")) {
@@ -591,7 +680,7 @@ document.getElementById("saveMarksBtn")?.addEventListener("click", async () => {
             if (resultsTabBtn) resultsTabBtn.classList.add("active"); if (resultsTabContent) resultsTabContent.classList.add("active");
             window.scrollTo({ top: 0, behavior: 'smooth' }); state.isEditModeActive = false; 
         }
-    } catch (e) { utils.showError("Save operation failed.", e); } finally { utils.enableBtn("saveMarksBtn"); }
+    } catch (e) { utils.showError("Save operation failed.", e); } finally { utils.enableBtn("saveMarksBtn", '<i class="bi bi-check-circle"></i> Save Marks'); }
 });
 
 window.editMark = (studentId, term) => {
@@ -601,7 +690,6 @@ window.editMark = (studentId, term) => {
     if (marksTabBtn) marksTabBtn.classList.add("active"); if (marksTabContent) marksTabContent.classList.add("active");
     const examTermSelect = document.getElementById("examTerm"); if (examTermSelect) examTermSelect.value = term;
     
-    // update total attendance UI
     const totalAttInput = document.getElementById("classTotalAttendance");
     if (totalAttInput) totalAttInput.value = state.termTotalAttendance[term] || "";
     
@@ -646,7 +734,7 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
     if (!state.madrasaUid || !state.assignedClass || !term) return alert("Please ensure you are logged in, a class is selected, and an exam term is chosen.");
 
     const btn = document.getElementById("downloadProgressReportBtn");
-    const originalText = btn.textContent; btn.innerHTML = `Generating PDF... Please Wait...`; btn.disabled = true;
+    const originalText = btn.innerHTML; btn.innerHTML = `Generating PDF...`; btn.disabled = true;
 
     try {
         const qStudents = query(collection(db, "students"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass));
@@ -659,10 +747,8 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
         snapStudents.forEach(doc => { const s = doc.data(); s.id = doc.id; s.marksInfo = marksData[s.id] || null; studentsList.push(s); });
         
         studentsList.sort((a, b) => { 
-            const gA = (a.gender || "Male").toLowerCase(); 
-            const gB = (b.gender || "Male").toLowerCase();
-            if (gA === 'male' && gB !== 'male') return -1;
-            if (gA !== 'male' && gB === 'male') return 1;
+            const gA = (a.gender || "Male").toLowerCase(); const gB = (b.gender || "Male").toLowerCase();
+            if (gA === 'male' && gB !== 'male') return -1; if (gA !== 'male' && gB === 'male') return 1;
             return String(a.admissionNo || "").localeCompare(String(b.admissionNo || ""), undefined, {numeric: true});
         });
 
@@ -690,8 +776,6 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
         const madrasaName = state.madrasaNameGlobal || "MADRASA NAME";
         const container = document.getElementById("prPrintContainer");
         const pdf = new jspdf.jsPDF('l', 'mm', 'a4'); 
-        
-        // 🛠️ Get global total attendance for this term
         let globalTotalAtt = state.termTotalAttendance && state.termTotalAttendance[term] ? state.termTotalAttendance[term] : "-";
 
         for (let i = 0; i < studentsList.length; i += 2) {
@@ -702,6 +786,18 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
                 const student = studentsList[i + j]; const marks = student.marksInfo;
                 let tableHtml = "", totalObtained = 0, maxTotal = 0, hasFailed = false;
 
+                // 🛠️ DYNAMIC SCALING VARIABLES
+                const subjectCount = marks && marks.subjectConfig ? marks.subjectConfig.length : 0;
+                const isCompact = subjectCount > 5;
+                const tdPad = isCompact ? "3px" : "6px";
+                const fsTable = isCompact ? "10px" : "12px";
+                const fsHead = isCompact ? "9px" : "10px";
+                const gapVal = isCompact ? "6px" : "8px";
+                const marginVal = isCompact ? "8px" : "12px";
+                const remarkMin = isCompact ? "25px" : "40px";
+                const titleSize = isCompact ? "18px" : "22px";
+                const subTitleSize = isCompact ? "10px" : "11px";
+
                 if (marks && marks.subjectConfig) {
                     marks.subjectConfig.forEach((sub, index) => {
                         let mVal = marks.marks[sub.name] !== undefined ? marks.marks[sub.name] : "";
@@ -711,9 +807,15 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
                             const mNum = Number(mVal); totalObtained += mNum;
                             if (mNum < sub.passMark) { status = "FAIL"; color = "red"; hasFailed = true; }
                         } else { status = "-"; color="black"; }
-                        tableHtml += `<tr><td>${String(index + 1).padStart(2, '0')}</td><td>${sub.name}</td><td>${sub.maxMark}</td><td>${mVal}</td><td style="color:${color};">${status}</td></tr>`;
+                        tableHtml += `<tr>
+                            <td style="padding:${tdPad}; font-size:${fsTable};">${String(index + 1).padStart(2, '0')}</td>
+                            <td style="padding:${tdPad}; font-size:${fsTable}; text-align:left;">${sub.name}</td>
+                            <td style="padding:${tdPad}; font-size:${fsTable};">${sub.maxMark}</td>
+                            <td style="padding:${tdPad}; font-size:${fsTable};">${mVal}</td>
+                            <td style="padding:${tdPad}; font-size:${fsTable}; color:${color};">${status}</td>
+                        </tr>`;
                     });
-                } else { tableHtml = `<tr><td colspan="5">No marks entered.</td></tr>`; }
+                } else { tableHtml = `<tr><td colspan="5" style="padding:${tdPad}; font-size:${fsTable};">No marks entered.</td></tr>`; }
 
                 let percentage = maxTotal > 0 ? ((totalObtained / maxTotal) * 100).toFixed(2) : "0.00";
                 let overallStatus = marks ? (hasFailed ? "FAIL" : "PASS") : "-"; let overallGrade = "-";
@@ -724,7 +826,6 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
                     else if (percentage >= 33) overallGrade = "D+"; else overallGrade = "D";
                 }
 
-                // 🛠️ Display Attendance as Present / Total
                 let attDisplay = "-";
                 if (marks) {
                     const p = marks.attendance || "-";
@@ -733,31 +834,32 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
 
                 container.innerHTML += `
                     <div class="pr-card">
-                        <div class="pr-header">
-                            <h1 class="pr-inst-name">${madrasaName}</h1>
-                            <div class="pr-sub-name">STUDENT RESULT PORTAL</div>
-                            <div class="pr-title">STUDENT PROGRESS REPORT</div><br>
-                            <div class="pr-year">ACADEMIC EXAM: ${term.toUpperCase()}</div>
+                        <div class="pr-header" style="margin-bottom:${marginVal};">
+                            <h1 class="pr-inst-name" style="font-size:${titleSize};">${madrasaName}</h1>
+                            <div class="pr-sub-name" style="font-size:${subTitleSize}; margin: 4px 0 6px 0;">STUDENT RESULT PORTAL</div>
+                            <div class="pr-title" style="font-size:${isCompact ? '16px' : '18px'}; padding: 4px 15px;">STUDENT PROGRESS REPORT</div><br>
+                            <div class="pr-year" style="font-size:${isCompact ? '9px' : '10px'}; padding: 3px 12px; border-radius: 12px; margin-top: 6px;">ACADEMIC EXAM: ${term.toUpperCase()}</div>
                         </div>
-                        <div class="pr-info-grid">
-                            <div class="pr-info-box"><div class="pr-info-label">GENDER</div><div class="pr-info-val">${student.gender === "Male" ? "Boy" : "Girl"}</div></div>
-                            <div class="pr-info-box"><div class="pr-info-label">ADMISSION NO.</div><div class="pr-info-val">${student.admissionNo || "-"}</div></div>
-                            <div class="pr-info-box"><div class="pr-info-label">CLASS</div><div class="pr-info-val">${state.assignedClass}</div></div>
-                            <div class="pr-info-box"><div class="pr-info-label">ATTENDANCE</div><div class="pr-info-val">${attDisplay}</div></div>
+                        <div class="pr-info-grid" style="gap:${gapVal}; margin-bottom:${marginVal};">
+                            <div class="pr-info-box" style="padding:${isCompact ? '4px' : '5px'};"><div class="pr-info-label" style="font-size:${isCompact ? '8px' : '9px'}; padding-bottom:${isCompact ? '2px' : '3px'}; margin-bottom:${isCompact ? '2px' : '3px'};">GENDER</div><div class="pr-info-val" style="font-size:${isCompact ? '12px' : '14px'};">${student.gender === "Male" ? "Boy" : "Girl"}</div></div>
+                            <div class="pr-info-box" style="padding:${isCompact ? '4px' : '5px'};"><div class="pr-info-label" style="font-size:${isCompact ? '8px' : '9px'}; padding-bottom:${isCompact ? '2px' : '3px'}; margin-bottom:${isCompact ? '2px' : '3px'};">ADMISSION NO.</div><div class="pr-info-val" style="font-size:${isCompact ? '12px' : '14px'};">${student.admissionNo || "-"}</div></div>
+                            <div class="pr-info-box" style="padding:${isCompact ? '4px' : '5px'};"><div class="pr-info-label" style="font-size:${isCompact ? '8px' : '9px'}; padding-bottom:${isCompact ? '2px' : '3px'}; margin-bottom:${isCompact ? '2px' : '3px'};">CLASS</div><div class="pr-info-val" style="font-size:${isCompact ? '12px' : '14px'};">${state.assignedClass}</div></div>
+                            <div class="pr-info-box" style="padding:${isCompact ? '4px' : '5px'};"><div class="pr-info-label" style="font-size:${isCompact ? '8px' : '9px'}; padding-bottom:${isCompact ? '2px' : '3px'}; margin-bottom:${isCompact ? '2px' : '3px'};">ATTENDANCE</div><div class="pr-info-val" style="font-size:${isCompact ? '12px' : '14px'};">${attDisplay}</div></div>
                         </div>
-                        <div class="pr-student-name">${student.name}</div>
-                        <table class="pr-table"><thead><tr><th>No.</th><th>Subject</th><th>Max. Marks</th><th>Marks Obtained</th><th>Status</th></tr></thead><tbody>${tableHtml}</tbody>
-                        ${marks ? `<tfoot><tr style="background:#f1f5f9; color:#0f5132;"><th colspan="2" style="text-align:right; padding-right:10px;">TOTAL</th><th>${maxTotal}</th><th>${totalObtained}</th><th>${overallStatus}</th></tr></tfoot>` : ""}
+                        <div class="pr-student-name" style="margin-bottom:${marginVal}; padding:${isCompact ? '5px' : '6px'}; font-size:${isCompact ? '14px' : '16px'};">${student.name}</div>
+                        <table class="pr-table" style="margin-bottom:${marginVal};">
+                            <thead><tr><th style="padding:${tdPad}; font-size:${fsHead};">No.</th><th style="padding:${tdPad}; font-size:${fsHead};">Subject</th><th style="padding:${tdPad}; font-size:${fsHead};">Max. Marks</th><th style="padding:${tdPad}; font-size:${fsHead};">Marks Obtained</th><th style="padding:${tdPad}; font-size:${fsHead};">Status</th></tr></thead>
+                            <tbody>${tableHtml}</tbody>
+                            ${marks ? `<tfoot><tr style="background:#f1f5f9; color:#0f5132;"><th colspan="2" style="text-align:right; padding-right:10px; font-size:${fsTable}; border: 1px solid #cbd5e1;">TOTAL</th><th style="font-size:${fsTable}; border: 1px solid #cbd5e1;">${maxTotal}</th><th style="font-size:${fsTable}; border: 1px solid #cbd5e1;">${totalObtained}</th><th style="font-size:${fsTable}; border: 1px solid #cbd5e1;">${overallStatus}</th></tr></tfoot>` : ""}
                         </table>
-                        <div style="background:#0f5132; color:white; text-align:center; padding:4px; font-size:12px; font-weight:bold; margin-bottom:10px; border-radius:4px;">OVERALL RESULT</div>
-                        <div class="pr-summary">
-                            <div class="pr-sum-box"><div class="pr-sum-label">TOTAL MARKS</div><div class="pr-sum-val">${totalObtained} / ${maxTotal}</div></div>
-                            <div class="pr-sum-box"><div class="pr-sum-label">PERCENTAGE</div><div class="pr-sum-val">${percentage}%</div></div>
-                            <div class="pr-sum-box"><div class="pr-sum-label">OVERALL GRADE</div><div class="pr-sum-val">${overallGrade}</div></div>
-                            <div class="pr-sum-box"><div class="pr-sum-label">CLASS RANK</div><div class="pr-sum-val">${getRank(student.id)}</div></div>
+                        <div class="pr-summary" style="gap:${gapVal}; margin-bottom:${marginVal};">
+                            <div class="pr-sum-box" style="padding:${isCompact ? '4px' : '6px'};"><div class="pr-sum-label" style="font-size:${isCompact ? '8px' : '9px'}; margin-bottom:${isCompact ? '2px' : '4px'};">TOTAL MARKS</div><div class="pr-sum-val" style="font-size:${isCompact ? '14px' : '16px'};">${totalObtained} / ${maxTotal}</div></div>
+                            <div class="pr-sum-box" style="padding:${isCompact ? '4px' : '6px'};"><div class="pr-sum-label" style="font-size:${isCompact ? '8px' : '9px'}; margin-bottom:${isCompact ? '2px' : '4px'};">PERCENTAGE</div><div class="pr-sum-val" style="font-size:${isCompact ? '14px' : '16px'};">${percentage}%</div></div>
+                            <div class="pr-sum-box" style="padding:${isCompact ? '4px' : '6px'};"><div class="pr-sum-label" style="font-size:${isCompact ? '8px' : '9px'}; margin-bottom:${isCompact ? '2px' : '4px'};">OVERALL GRADE</div><div class="pr-sum-val" style="font-size:${isCompact ? '14px' : '16px'};">${overallGrade}</div></div>
+                            <div class="pr-sum-box" style="padding:${isCompact ? '4px' : '6px'};"><div class="pr-sum-label" style="font-size:${isCompact ? '8px' : '9px'}; margin-bottom:${isCompact ? '2px' : '4px'};">CLASS RANK</div><div class="pr-sum-val" style="font-size:${isCompact ? '14px' : '16px'};">${getRank(student.id)}</div></div>
                         </div>
-                        <div class="pr-remarks">TEACHER'S REMARKS: <br><br>.........................................................................................................................</div>
-                        <div class="pr-footer"><div class="pr-sign">CLASS TEACHER</div><div class="pr-sign">PARENT / GUARDIAN</div><div class="pr-sign">HEAD TEACHER</div></div>
+                        <div class="pr-remarks" style="margin-bottom:${marginVal}; min-height:${remarkMin}; padding:${isCompact ? '8px' : '10px'}; font-size:${isCompact ? '10px' : '11px'};">TEACHER'S REMARKS: <br><br>.........................................................................................................................</div>
+                        <div class="pr-footer"><div class="pr-sign" style="font-size:${isCompact ? '9px' : '10px'}; padding-top:${isCompact ? '4px' : '5px'}; margin-top:${isCompact ? '15px' : '30px'};">CLASS TEACHER</div><div class="pr-sign" style="font-size:${isCompact ? '9px' : '10px'}; padding-top:${isCompact ? '4px' : '5px'}; margin-top:${isCompact ? '15px' : '30px'};">PARENT / GUARDIAN</div><div class="pr-sign" style="font-size:${isCompact ? '9px' : '10px'}; padding-top:${isCompact ? '4px' : '5px'}; margin-top:${isCompact ? '15px' : '30px'};">HEAD TEACHER</div></div>
                     </div>`;
             }
 
@@ -771,13 +873,13 @@ document.getElementById("downloadProgressReportBtn")?.addEventListener("click", 
         }
 
         pdf.save(`Progress_Report_${state.assignedClass}_${term.replace(/\s+/g, '_')}.pdf`);
-    } catch (error) { console.error("PDF Error:", error); alert("Error generating Progress Reports."); } finally { btn.textContent = originalText; btn.disabled = false; }
+    } catch (error) { console.error("PDF Error:", error); alert("Error generating Progress Reports."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
 document.getElementById("savePublishSettingsBtn")?.addEventListener("click", async () => {
     const term = document.getElementById("publishTerm").value; const publishDateTime = document.getElementById("publishDateTime").value; const status = document.getElementById("publishStatus").value; const isPublished = (status === "published");
     if (!term) return alert("Please select a term.");
-    const btn = document.getElementById("savePublishSettingsBtn"); const originalText = btn.textContent; btn.textContent = "Saving & Syncing..."; btn.disabled = true;
+    const btn = document.getElementById("savePublishSettingsBtn"); const originalText = btn.innerHTML; btn.innerHTML = "Saving & Syncing..."; btn.disabled = true;
     try {
         const docId = `${state.madrasaUid}_${state.assignedClass}_${term.replace(/\s+/g, '')}`;
         await setDoc(doc(db, "publish_settings", docId), { isPublished: isPublished, publishDateTime: publishDateTime, term: term, className: state.assignedClass, madrasaUid: state.madrasaUid, updatedAt: new Date().toISOString() });
@@ -785,7 +887,7 @@ document.getElementById("savePublishSettingsBtn")?.addEventListener("click", asy
         await syncResultCache(term);
         if (statusText) { statusText.innerHTML = isPublished ? `✅ Results for '${term}' are now PUBLISHED & VISIBLE!` : `🔒 Results for '${term}' are now HIDDEN!`; statusText.style.color = isPublished ? "#10b981" : "#ef4444"; }
         alert(`Publish settings for ${term} updated successfully!`);
-    } catch (error) { console.error("Publish Error:", error); alert("Failed to save publish settings."); } finally { btn.textContent = originalText; btn.disabled = false; }
+    } catch (error) { console.error("Publish Error:", error); alert("Failed to save publish settings."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
 document.getElementById("publishTerm")?.addEventListener("change", async (e) => {
@@ -803,63 +905,57 @@ document.getElementById("selectAllUpgrade")?.addEventListener("change", (e) => {
     allBoxes.forEach(box => box.checked = isChecked);
 });
 
+// 🛠️ UPGRADE PROCESS FIX (Delete old marks completely)
 document.getElementById("processUpgradeBtn")?.addEventListener("click", async () => {
     const targetClass = document.getElementById("upgradeTargetClass").value;
     if (!targetClass) return alert("Please select a target class to upgrade.");
     const checkboxes = document.querySelectorAll('#upgradeTableBody input[type="checkbox"]:checked');
     if (checkboxes.length === 0) return alert("Please select at least one student to upgrade.");
-    if (!confirm(`Are you sure you want to upgrade ${checkboxes.length} student(s) to Class ${targetClass}?`)) return;
+    if (!confirm(`Are you sure you want to upgrade ${checkboxes.length} student(s) to Class ${targetClass}?\n\nശ്രദ്ധിക്കുക: അപ്ഗ്രേഡ് ചെയ്യുന്നതിലൂടെ ഈ കുട്ടികളുടെ നിലവിലുള്ള ക്ലാസ്സിലെ മുഴുവൻ മാർക്കുകളും പൂർണ്ണമായും ഡിലീറ്റ് ആകുന്നതാണ് (No duplicates in Firebase).`)) return;
 
-    const btn = document.getElementById("processUpgradeBtn"); const originalText = btn.textContent; btn.textContent = "Upgrading Please Wait..."; btn.disabled = true;
+    const btn = document.getElementById("processUpgradeBtn"); const originalText = btn.innerHTML; btn.innerHTML = "Upgrading Please Wait..."; btn.disabled = true;
     try {
-        let count = 0; let currentBatch = writeBatch(db); 
-        for (let box of checkboxes) { const studentDocId = box.value; if(studentDocId) { const studentRef = doc(db, "students", studentDocId); currentBatch.set(studentRef, { className: targetClass }, { merge: true }); count++; } }
-        await currentBatch.commit();
-        localStorage.removeItem(`cache_students_${state.assignedClass}`); state.isSmartCacheValid = false; await triggerCacheUpdate(); 
-        alert(`Successfully upgraded ${count} student(s) to Class ${targetClass}!`); window.location.reload(); 
-    } catch (error) { console.error("Upgrade Error:", error); alert("An error occurred while upgrading."); } finally { btn.textContent = originalText; btn.disabled = false; }
+        let studentIdsToUpgrade = Array.from(checkboxes).map(box => box.value);
+        let upgradedAdms = studentIdsToUpgrade.map(id => state.studentsMap[id]?.admissionNo).filter(Boolean);
+        
+        let batches = []; let currentBatch = writeBatch(db); let operationCount = 0; let count = 0; 
+        
+        // 1. Upgrade student class
+        for (let studentId of studentIdsToUpgrade) { 
+            if (operationCount >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); operationCount = 0; }
+            currentBatch.set(doc(db, "students", studentId), { className: targetClass }, { merge: true }); count++; operationCount++;
+        }
+        
+        // 2. Delete marks from 'marks' collection
+        const marksSnap = await getDocs(query(collection(db, "marks"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass)));
+        marksSnap.docs.forEach(markDoc => {
+            if (studentIdsToUpgrade.includes(markDoc.data().studentId)) {
+                if (operationCount >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); operationCount = 0; }
+                currentBatch.delete(doc(db, "marks", markDoc.id));
+                operationCount++;
+            }
+        });
+
+        // 3. Delete marks from 'public_results' collection
+        const publicMarksSnap = await getDocs(query(collection(db, "public_results"), where("madrasaUid", "==", state.madrasaUid), where("className", "==", state.assignedClass)));
+        publicMarksSnap.docs.forEach(pDoc => {
+            if (upgradedAdms.includes(pDoc.data().admissionNo) || studentIdsToUpgrade.includes(pDoc.data().studentId)) {
+                if (operationCount >= 490) { batches.push(currentBatch.commit()); currentBatch = writeBatch(db); operationCount = 0; }
+                currentBatch.delete(doc(db, "public_results", pDoc.id));
+                operationCount++;
+            }
+        });
+
+        if (operationCount > 0) batches.push(currentBatch.commit());
+        await Promise.all(batches);
+        
+        localStorage.removeItem(`cache_students_${state.assignedClass}`); 
+        // clear old marks caches
+        Object.keys(localStorage).forEach(key => { if (key.startsWith(`cache_marks_${state.assignedClass}`)) localStorage.removeItem(key); });
+
+        state.isSmartCacheValid = false; await triggerCacheUpdate(); 
+        alert(`Successfully upgraded ${count} student(s) to Class ${targetClass} and safely removed their old marks!`); window.location.reload(); 
+    } catch (error) { console.error("Upgrade Error:", error); alert("An error occurred while upgrading."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
-// 🛠️ ADD SUBJECT BUTTON FIX
-document.getElementById("addSubjectBtn")?.addEventListener("click", async () => {
-    const name = document.getElementById("newSubjectName").value.trim().toUpperCase();
-    const maxMark = parseInt(document.getElementById("newSubjectMaxMark").value);
-    const passMark = parseInt(document.getElementById("newSubjectPassMark").value);
-
-    if (!name || isNaN(maxMark) || isNaN(passMark)) {
-        return alert("ദയവായി ശരിയായ Subject Name, Max Mark, Pass Mark എന്നിവ നൽകുക.");
-    }
-    
-    const exists = state.classSubjects.some(s => s.name.toUpperCase() === name);
-    if (exists) return alert(`'${name}' എന്ന സബ്ജക്ട് നേരത്തെ തന്നെ ആഡ് ചെയ്തിട്ടുണ്ട്!`);
-
-    const btn = document.getElementById("addSubjectBtn");
-    const originalText = btn.textContent; 
-    btn.textContent = "Adding..."; btn.disabled = true;
-
-    try {
-        state.classSubjects.push({ name, maxMark, passMark });
-        await network.withRetry(() => setDoc(doc(db, "class_subjects", `${state.madrasaUid}_${state.assignedClass}`), { 
-            subjects: state.classSubjects, 
-            muallimName: state.classMuallimName 
-        }, { merge: true }));
-        
-        // Input fields ക്ലിയർ ചെയ്യാൻ
-        document.getElementById("newSubjectName").value = ""; 
-        document.getElementById("newSubjectMaxMark").value = ""; 
-        document.getElementById("newSubjectPassMark").value = "";
-        
-        utils.safeSetCache(`cache_subs_${state.assignedClass}`, { subjects: state.classSubjects, muallimName: state.classMuallimName });
-        await triggerCacheUpdate();
-        renderSubjectsUI();
-        loadResults();
-    } catch (e) {
-        console.error("Error adding subject:", e);
-        alert("സബ്ജക്ട് സേവ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു.");
-        state.classSubjects.pop(); // എറർ വന്നാൽ തിരിച്ച് പഴയത് പോലെ ആക്കാൻ
-    } finally {
-        btn.textContent = originalText; btn.disabled = false;
-    }
-});
-
-checkAuth(async (user) => { state.teacherUid = user.uid; editModalInstance = new bootstrap.Modal(document.getElementById('editStudentModal')); setupTabs(); await loadTeacherData(); });
+checkAuth(async (user) => { state.teacherUid = user.uid; setupTabs(); await loadTeacherData(); });

@@ -2,87 +2,211 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Madrasa Teacher Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Madrasa Teacher App</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- External Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
+
     <style>
-        :root { --bg-color: #f8fafc; --text-color: #334155; --primary-dark: #1e293b; --primary-green: #0ea5e9; --primary-green-hover: #0284c7; --border-color: #e2e8f0; --card-bg: #ffffff; --red-alert: #ef4444; }
-        
-        html, body { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; box-sizing: border-box; overflow-x: hidden; width: 100%; }
-        *, *::before, *::after { box-sizing: inherit; }
-        
-        .header { background-color: var(--card-bg); color: var(--primary-dark); padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px; }
-        .header-title { margin: 0; font-size: 18px; font-weight: 700; display: flex; align-items: center; }
-        @media (min-width: 768px) { .header-title { font-size: 22px; } .header { padding: 15px 30px; } }
-        .header-logo { margin-right: 12px; color: var(--primary-green); }
-        
-        .logout-btn { background-color: #f1f5f9; color: var(--text-color); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
-        .logout-btn:hover { background-color: #e2e8f0; color: var(--red-alert); border-color: var(--red-alert); }
-        
-        .main-container { max-width: 1200px; margin: 0 auto; padding: 20px 10px; box-sizing: border-box; width: 100%; }
-        @media (min-width: 768px) { .main-container { padding: 30px 20px; } }
-        
-        .tabs-container { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
-        .tab-btn { background-color: transparent; border: none; color: var(--text-color); padding: 10px 15px; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
-        .tab-btn:hover { background-color: #f1f5f9; }
-        .tab-btn.active { background-color: var(--primary-dark); color: white; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
-        
-        .card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        @media (min-width: 768px) { .card { padding: 25px; } }
-        .card h3 { margin-top: 0; color: var(--primary-dark); border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px; font-size: 16px; font-weight: 700; }
-        @media (min-width: 768px) { .card h3 { font-size: 18px; } }
-        
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 13px; color: #64748b; }
-        .form-control { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; transition: all 0.2s; background-color: #f8fafc; }
-        .form-control:focus { outline: none; border-color: var(--primary-green); background-color: #fff; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
-        
-        .btn-custom { display: inline-block; padding: 10px 15px; font-size: 14px; font-weight: 600; text-align: center; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; width: 100%; margin-bottom: 8px;}
-        .btn-auto { width: auto; }
-        @media (min-width: 768px) { .btn-custom { margin-bottom: 0; } }
-        .btn-primary-custom { background-color: var(--primary-green); color: white; }
-        .btn-primary-custom:hover { background-color: var(--primary-green-hover); }
-        .btn-danger-custom { background-color: var(--red-alert); color: white; }
-        .btn-warning-custom { background-color: #f59e0b; color: white; }
-        .btn-info-custom { background-color: #8b5cf6; color: white; }
-        .btn-small { padding: 6px 10px; font-size: 12px; }
-        
-        .grid-2 { display: grid; grid-template-columns: 1fr; gap: 15px; }
-        @media (min-width: 768px) { .grid-2 { grid-template-columns: 1fr 1fr; gap: 20px; } }
-        .grid-3 { display: grid; grid-template-columns: 1fr; gap: 15px; }
-        @media (min-width: 768px) { .grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; } }
-        
-        .divider-text { text-align: center; margin: 25px 0; position: relative; }
-        .divider-text::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: var(--border-color); z-index: 1; }
-        .divider-text span { background: var(--card-bg); padding: 0 10px; position: relative; z-index: 2; color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        /* ==========================================
+           1. CSS VARIABLES (THEME & COLORS)
+           ========================================== */
+        :root {
+            --primary: #0F766E; --primary-hover: #0D9488; --primary-light: #CCFBF1;
+            --success: #10B981; --warning: #F59E0B; --danger: #EF4444; --info: #3B82F6;
+            --bg-app: #F8FAFC; --bg-surface: #FFFFFF; --text-main: #0F172A; --text-muted: #64748B;
+            --border: #E2E8F0; --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --radius-lg: 16px; --radius-md: 12px;
+        }
 
-        .excel-box { background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; }
+        body.dark-theme {
+            --bg-app: #0F172A; --bg-surface: #1E293B; --text-main: #F8FAFC; --text-muted: #94A3B8;
+            --border: #334155; --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3); --primary-light: #134E4A;
+        }
 
-        .table-responsive { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border-color); -webkit-overflow-scrolling: touch; }
-        table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
-        @media (min-width: 768px) { table.data-table { font-size: 14px; } }
-        table.data-table th, table.data-table td { border-bottom: 1px solid var(--border-color); padding: 10px; text-align: left; }
-        table.data-table th { background-color: #f1f5f9; font-weight: 600; color: var(--text-color); white-space: nowrap; }
-        table.data-table tbody tr:hover { background-color: #f8fafc; }
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-app); color: var(--text-main); margin: 0; padding: 0; transition: background-color 0.3s, color 0.3s; }
+        h1, h2, h3, h4, h5, h6 { color: var(--text-main); font-weight: 600; margin-top: 0; }
         
-        .subject-tag { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin: 5px 5px 0 0; font-weight: 500; border: 1px solid #bae6fd; }
-        .delete-sub-btn { color: #ef4444; cursor: pointer; margin-left: 8px; font-weight: bold; border: none; background: none; }
+        .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+        @media (min-width: 992px) { .app-layout { flex-direction: row; } }
+
+        /* ==========================================
+           2. NAVIGATION 
+           ========================================== */
+        .app-nav {
+            background-color: var(--bg-surface); border-top: 1px solid var(--border);
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+            display: flex; justify-content: space-around; padding: 10px 5px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.05); transition: all 0.3s;
+        }
+        .tab-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 11px; font-weight: 600; padding: 8px 10px;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            border-radius: 12px; cursor: pointer; transition: all 0.2s; flex: 1;
+        }
+        .tab-btn * { pointer-events: none; }
+        .tab-btn i { font-size: 20px; transition: transform 0.2s; }
+        .tab-btn.active { color: var(--primary); }
+        .tab-btn.active i { transform: scale(1.15); }
+
+        @media (min-width: 992px) {
+            .app-nav {
+                position: fixed; top: 0; bottom: 0; left: 0; width: 260px;
+                border-top: none; border-right: 1px solid var(--border);
+                flex-direction: column; justify-content: flex-start; padding: 20px;
+            }
+            .nav-brand-desktop { display: block !important; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+            .tab-btn { flex-direction: row; font-size: 15px; padding: 12px 20px; flex: none; justify-content: flex-start; gap: 15px; margin-bottom: 8px; }
+            .tab-btn.active { background-color: var(--primary-light); color: var(--primary); }
+        }
+        .nav-brand-desktop { display: none; }
+
+        /* ==========================================
+           3. MAIN APP HEADER & LAYOUT
+           ========================================== */
+        .app-main { flex: 1; padding-bottom: 80px; width: 100%; }
+        @media (min-width: 992px) { .app-main { margin-left: 260px; padding-bottom: 40px; } }
+
+        .app-header {
+            background-color: rgba(var(--bg-surface), 0.9); border-bottom: 1px solid var(--border);
+            padding: 15px 20px; position: sticky; top: 0; z-index: 99; backdrop-filter: blur(10px);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header-title-box { display: flex; align-items: center; gap: 12px; }
+        .header-logo { width: 40px; height: 40px; background: var(--primary-light); color: var(--primary); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .header-text h1 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-main); }
+        .header-text p { margin: 0; font-size: 12px; color: var(--text-muted); font-weight: 500; }
         
+        .icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-app); color: var(--text-main); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
+        .content-container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+        .tab-content { display: none; opacity: 0; transition: opacity 0.3s; }
+        .tab-content.active { display: block; opacity: 1; animation: slideUp 0.4s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ==========================================
+           4. CARDS & FORMS
+           ========================================== */
+        .card { background-color: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
+        .card h3 { font-size: 18px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        @media (min-width: 768px) { .grid-2 { grid-template-columns: repeat(2, 1fr); } .grid-3 { grid-template-columns: repeat(3, 1fr); } .grid-4 { grid-template-columns: repeat(4, 1fr); } }
+
+        .form-group { margin-bottom: 16px; width: 100%; }
+        .form-group label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+        .form-control { width: 100%; padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background-color: var(--bg-app); color: var(--text-main); font-size: 14px; }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        /* Buttons */
+        .btn-custom { padding: 12px 20px; font-size: 14px; font-weight: 600; border-radius: var(--radius-md); border: none; cursor: pointer; transition: all 0.2s; text-align: center; display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn-primary-custom { background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; }
+        .btn-danger-custom { background: var(--bg-app); color: var(--danger); border: 1px solid var(--danger); }
+        .btn-warning-custom { background: var(--warning); color: white; }
+        .btn-info-custom { background: var(--info); color: white; }
+        .btn-small { padding: 8px 14px; font-size: 13px; }
+        .btn-auto { width: auto; } @media (max-width: 575px) { .btn-auto { width: 100%; margin-bottom: 8px; } }
+
+        /* Quick Action & Excel Box */
+        .stat-card { background: linear-gradient(145deg, var(--primary), var(--primary-hover)); color: white; border-radius: var(--radius-lg); padding: 20px; }
+        .quick-action-btn { background: var(--bg-app); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 15px; text-align: center; cursor: pointer; color: var(--text-main); font-weight: 600; font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .quick-action-btn i { font-size: 24px; color: var(--primary); }
+        .excel-box { background-color: var(--bg-app); border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 30px 20px; text-align: center; }
+        
+        .subject-tag { display: inline-flex; align-items: center; background: var(--primary-light); color: var(--primary); padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin: 0 8px 8px 0; }
+        .delete-sub-btn { color: var(--danger); cursor: pointer; margin-left: 10px; font-weight: bold; border: none; background: none; }
+
+        /* ==========================================
+           5. RESPONSIVE TABLES & VERTICAL HEADERS GRID
+           ========================================== */
+        .table-responsive { 
+            overflow-x: auto; 
+            border-radius: var(--radius-md); 
+            border: 1px solid var(--border); 
+            -webkit-overflow-scrolling: touch; 
+        }
+        table.data-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: 14px; 
+            background: var(--bg-surface); 
+        }
+        
+        #tab-students table.data-table { min-width: 800px; }
+        #tab-results table.data-table { min-width: auto; }
+        #tab-upgrade table.data-table { min-width: 100%; }
+
+        table.data-table th, table.data-table td { 
+            border-bottom: 1px solid var(--border); 
+            padding: 12px; 
+            text-align: left; 
+            white-space: nowrap; 
+        }
+
+        /* 🛠️ RESULTS TABLE GRID FIX (Center alignment & Vertical Lines) */
+        #tab-results table.data-table th, 
+        #tab-results table.data-table td {
+            border: 1px solid var(--border); /* Adds vertical and horizontal lines */
+            text-align: center; 
+            vertical-align: middle;
+        }
+        #tab-results table.data-table th:nth-child(3),
+        #tab-results table.data-table td:nth-child(3) {
+            text-align: left !important; /* Keep student name left aligned */
+        }
+        
+        #tab-upgrade table.data-table th, #tab-upgrade table.data-table td {
+            padding: 12px 5px; 
+        }
+
+        table.data-table th { 
+            background-color: var(--bg-app); 
+            font-weight: 600; 
+            color: var(--text-muted); 
+            text-transform: uppercase; 
+            font-size: 12px; 
+        }
+        table.data-table tbody tr:hover { background-color: var(--bg-app); }
+
+        /* സ്ക്രീനിൽ മാർക്ക് കാണിക്കുന്ന ഭാഗത്തെ ലംബമായ (Vertical) ഹെഡിങ് സ്റ്റൈൽ */
+        th.vert-hdr {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            white-space: nowrap;
+            padding: 10px 5px !important;
+            height: 120px;
+            text-align: center !important; /* Center aligned as requested */
+            vertical-align: middle !important;
+            color: var(--primary) !important;
+            font-weight: 700 !important;
+        }
+
+        /* ==========================================
+           6. PDF EXPORT CLASSES 
+           ========================================== */
         .pdf-wrapper { position: absolute; left: -9999px; top: -9999px; z-index: -9999; opacity: 0; background: white; pointer-events: none; }
-        
         .pdf-area-standard { padding: 20px; box-sizing: border-box; background-color: #ffffff; color: black; font-family: Arial, sans-serif; }
         .pdf-header { text-align: center; margin-bottom: 20px; }
         .pdf-header h1 { margin: 0; font-size: 20px; font-weight: bold; text-transform: uppercase; }
         .pdf-header h2 { margin: 5px 0 0 0; font-size: 14px; font-weight: bold; text-transform: uppercase; }
-        
         #pdfExportArea { width: 1000px; page-break-inside: avoid; }
+        
         .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         .pdf-table th, .pdf-table td { border: 1px solid black; padding: 6px 4px; text-align: center; font-size: 13px; font-weight: bold; }
         .pdf-table th.name-col { text-align: center; width: 220px; }
@@ -103,7 +227,6 @@
         .desk-label-box p { margin: 8px 0; font-size: 15px; font-weight: bold; }
         
         #pdfStudentListArea { width: 1000px; padding: 30px; }
-
         .pdf-summary-container { display: flex; justify-content: space-between; gap: 20px; width: 100%; margin-bottom: 20px; }
         .pdf-summary-box { width: 32%; border-collapse: collapse; text-align: center; font-size: 13px; }
         .pdf-summary-box th, .pdf-summary-box td { border: 1px solid black; padding: 5px; font-weight: bold; }
@@ -111,288 +234,309 @@
         .pdf-footer { display: flex; border: 1px solid black; font-size: 13px; font-weight: bold; width: 100%; }
         .pdf-footer-left { width: 30%; border-right: 1px solid black; padding: 10px; text-align: center; background-color: #f0f0f0; }
         .pdf-footer-right { width: 70%; padding: 10px; text-align: center; text-transform: uppercase; }
-
-        /* Progress Report Styles (A4 Landscape) */
+        
+        /* 🛠️ BEAUTIFUL PROGRESS REPORT CSS (Dynamic values injected via JS) */
         .pr-a4-landscape { width: 297mm; height: 210mm; background: white; display: flex; box-sizing: border-box; padding: 10mm; gap: 10mm; font-family: 'Times New Roman', serif; }
         .pr-card { flex: 1; border: 3px double #0f5132; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; position: relative; background: #fffaf0; }
         .pr-card::before { content: ""; position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px; border: 1px solid #d4af37; pointer-events: none; border-radius: 4px; }
-        .pr-header { text-align: center; margin-bottom: 15px; }
-        .pr-inst-name { font-size: 22px; font-weight: bold; color: #0f5132; margin: 0; text-transform: uppercase; letter-spacing: 1px;}
-        .pr-sub-name { font-size: 11px; font-weight: bold; color: #d4af37; letter-spacing: 2px; margin: 4px 0 8px 0; }
-        .pr-title { font-size: 18px; font-weight: bold; color: #0f5132; border-bottom: 2px solid #d4af37; border-top: 2px solid #d4af37; display: inline-block; padding: 5px 20px; letter-spacing: 1px; }
-        .pr-year { background: #0f5132; color: white; display: inline-block; padding: 3px 15px; border-radius: 15px; font-size: 10px; font-weight: bold; margin-top: 8px; }
-        .pr-info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-        .pr-info-box { border: 1px solid #0f5132; text-align: center; padding: 5px; border-radius: 5px; background: white; }
-        .pr-info-label { font-size: 9px; font-weight: bold; color: #0f5132; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 3px; }
-        .pr-info-val { font-size: 14px; font-weight: bold; color: #1e293b; }
-        .pr-student-name { background: #0f5132; color: white; text-align: center; padding: 6px; font-size: 16px; font-weight: bold; text-transform: uppercase; border-radius: 4px; margin-bottom: 12px; }
-        .pr-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; background: white; }
-        .pr-table th, .pr-table td { border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-size: 12px; font-weight: bold; }
-        .pr-table th { background: #0f5132; color: white; font-size: 10px; text-transform: uppercase; }
+        .pr-header { text-align: center; }
+        .pr-inst-name { font-weight: bold; color: #0f5132; margin: 0; text-transform: uppercase; letter-spacing: 1px;}
+        .pr-sub-name { font-weight: bold; color: #d4af37; letter-spacing: 2px; }
+        .pr-title { font-weight: bold; color: #0f5132; border-bottom: 2px solid #d4af37; border-top: 2px solid #d4af37; display: inline-block; letter-spacing: 1px; }
+        .pr-year { background: #0f5132; color: white; display: inline-block; font-weight: bold; }
+        .pr-info-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+        .pr-info-box { border: 1px solid #0f5132; text-align: center; border-radius: 4px; background: white; }
+        .pr-info-label { font-weight: bold; color: #0f5132; border-bottom: 1px solid #e2e8f0; }
+        .pr-info-val { font-weight: bold; color: #1e293b; }
+        .pr-student-name { background: #0f5132; color: white; text-align: center; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
+        .pr-table { width: 100%; border-collapse: collapse; background: white; }
+        .pr-table th, .pr-table td { border: 1px solid #cbd5e1; text-align: center; font-weight: bold; }
+        .pr-table th { background: #0f5132; color: white; text-transform: uppercase; }
         .pr-table td:nth-child(2) { text-align: left; padding-left: 10px; }
-        .pr-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
-        .pr-sum-box { border: 1px solid #d4af37; text-align: center; padding: 6px; border-radius: 5px; background: white; }
-        .pr-sum-label { font-size: 9px; font-weight: bold; color: #64748b; margin-bottom: 4px; }
-        .pr-sum-val { font-size: 16px; font-weight: bold; color: #0f5132; }
-        .pr-remarks { border: 1px solid #cbd5e1; border-radius: 5px; padding: 10px; font-size: 11px; font-weight: bold; color: #475569; margin-bottom: 15px; background: white; min-height: 40px;}
+        .pr-summary { display: grid; grid-template-columns: repeat(4, 1fr); }
+        .pr-sum-box { border: 1px solid #d4af37; text-align: center; border-radius: 4px; background: white; }
+        .pr-sum-label { font-weight: bold; color: #64748b; }
+        .pr-sum-val { font-weight: bold; color: #0f5132; }
+        .pr-remarks { border: 1px solid #cbd5e1; border-radius: 5px; font-weight: bold; color: #475569; background: white; }
         .pr-footer { display: flex; justify-content: space-between; margin-top: auto; padding: 0 10px; }
-        .pr-sign { text-align: center; font-size: 10px; font-weight: bold; color: #0f5132; width: 30%; border-top: 1px solid #0f5132; padding-top: 5px; margin-top: 30px; }
+        .pr-sign { text-align: center; font-weight: bold; color: #0f5132; width: 30%; border-top: 1px solid #0f5132; }
     </style>
 </head>
 <body>
-
-    <header class="header">
-        <h1 class="header-title">
-            <svg class="header-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
-            </svg>
-            <span id="displayMadrasaName">Madrasa Name</span> 
-            <span style="font-size: 14px; margin-left: 8px; color: #64748b; font-weight: 500;">(Class: <span id="displayClassName">XX</span>)</span>
-        </h1>
-        <button class="logout-btn" id="logoutBtn">Logout</button>
-    </header>
-
-    <div class="main-container">
-        <div class="tabs-container">
-            <button class="tab-btn active" data-tab="tab-students">1. Manage Students</button>
-            <button class="tab-btn" data-tab="tab-marks">2. Enter Marks</button>
-            <button class="tab-btn" data-tab="tab-results">3. Results & Downloads</button>
-            <button class="tab-btn" data-tab="tab-upgrade">4. Upgrade</button>
-        </div>
-
-        <div id="tab-students" class="tab-content active">
-            <div class="card" style="max-width: 900px; margin: 0 auto 30px auto; border-top: 4px solid var(--primary-green);">
-                <h3>Student Registration</h3>
-                <div class="grid-2">
-                    <div class="form-group"><label>Name *</label><input type="text" id="studentName" class="form-control" placeholder="Student Name"></div>
-                    <div class="form-group"><label>Admission No *</label><input type="text" id="admissionNo" class="form-control" placeholder="Ad. No"></div>
-                    <div class="form-group"><label>Gender *</label><select id="gender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select></div>
-                    <div class="form-group"><label>Date of Birth</label><input type="date" id="dob" class="form-control"></div>
-                    <div class="form-group"><label>Father's Name</label><input type="text" id="fatherName" class="form-control" placeholder="Father's Name"></div>
-                    <div class="form-group"><label>Place</label><input type="text" id="place" class="form-control" placeholder="Place"></div>
-                    <div class="form-group"><label>Contact No</label><input type="text" id="contactNo" class="form-control" placeholder="Phone Number"></div>
-                    <div class="form-group"><label>WhatsApp No</label><input type="text" id="whatsappNo" class="form-control" placeholder="WhatsApp Number"></div>
-                </div>
-                <div class="mt-3" style="text-align: right;"><button class="btn-custom btn-primary-custom btn-auto" id="addStudentBtn" style="min-width: 200px;">Save Student Data</button></div>
-
-                <div class="divider-text"><span>Or Bulk Add via Excel</span></div>
-                <div class="excel-box">
-                    <div class="form-group mx-auto" style="max-width: 400px; text-align: left;">
-                        <label>Upload Student Excel File</label>
-                        <input type="file" id="studentExcel" class="form-control" accept=".xlsx, .xls">
-                    </div>
-                    <p style="font-size: 13px; color: #e74c3c; font-weight: bold; margin-top: 10px; line-height: 1.6;">
-                    നിർബന്ധമായും വേണ്ട കോളങ്ങൾ: Name, AdmissionNo <br>
-                    <span style="color: #475569; font-weight: normal; font-size: 12px;">(മറ്റു വിവരങ്ങൾ നൽകണമെങ്കിൽ എക്സൽ കോളത്തിന്റെ പേര് കൃത്യമായി ഇങ്ങനെ തന്നെ നൽകുക: Gender, DOB, FatherName, Place, ContactNo, WhatsappNo)</span>
-                    </p>
-                    <button class="btn-custom btn-primary-custom btn-auto" id="uploadStudentExcelBtn">Upload Excel Data</button>
-                </div>
+    <div class="app-layout">
+        
+        <!-- SIDEBAR / BOTTOM NAVIGATION -->
+        <nav class="app-nav">
+            <div class="nav-brand-desktop">
+                <div class="header-logo" style="margin-bottom: 10px;"><i class="bi bi-mortarboard-fill"></i></div>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Madrasa App</h3>
+                <p style="margin: 0; font-size: 12px; color: var(--text-muted);">Teacher Portal</p>
             </div>
+            
+            <button class="tab-btn active" data-tab="tab-students"><i class="bi bi-house-door-fill"></i> Home</button>
+            <button class="tab-btn" data-tab="tab-marks"><i class="bi bi-journal-check"></i> Marks</button>
+            <button class="tab-btn" data-tab="tab-results"><i class="bi bi-bar-chart-fill"></i> Results</button>
+            <button class="tab-btn" data-tab="tab-upgrade"><i class="bi bi-capslock-fill"></i> Promote</button>
+        </nav>
 
-            <div class="card">
-                <h3 style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: none;">
-                    Registered Students List 
-                    <div style="display:flex; gap:10px; flex-wrap: wrap;">
-                        <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadStudentListBtn">Download List PDF</button>
-                        <button class="btn-custom btn-danger-custom btn-auto btn-small" id="deleteAllStudentsBtn">Delete All</button>
-                    </div>
-                </h3>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th><th>Action</th></tr></thead>
-                        <tbody id="studentsTableBody"><tr><td colspan="9" style="text-align: center; padding: 20px;">Loading data...</td></tr></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-marks" class="tab-content">
-            <div class="card" style="border-top: 4px solid var(--primary-green);">
-                <h3>Manage Class Subjects & Marks</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <input type="text" id="newSubjectName" class="form-control" placeholder="Subject Name" style="flex: 1; min-width: 150px;">
-                    <input type="number" id="newSubjectMaxMark" class="form-control" placeholder="Max Mark" style="width: 100px; flex: none;">
-                    <input type="number" id="newSubjectPassMark" class="form-control" placeholder="Pass Mark" style="width: 100px; flex: none;">
-                    <button class="btn-custom btn-primary-custom btn-auto" id="addSubjectBtn">Add</button>
-                </div>
-                <div id="subjectTagsContainer" style="margin-top: 15px;"></div>
-            </div>
-
-            <!-- 🛠️ Exam Configuration with Total Attendance -->
-            <div class="card">
-                <h3>Exam Configuration</h3>
-                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
-                    <div class="form-group" style="min-width: 200px; margin-bottom: 0;">
-                        <label>Exam Term</label>
-                        <select id="examTerm" class="form-control">
-                            <option value="Monthly Test">Monthly Test</option>
-                            <option value="Quarterly Exam">Quarterly Exam</option>
-                            <option value="Half Yearly Exam">Half Yearly Exam</option>
-                            <option value="Annual Exam">Annual Exam</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="min-width: 150px; margin-bottom: 0;">
-                        <label>Total Working Days (ആകെ ഹാജർ)</label>
-                        <input type="number" id="classTotalAttendance" class="form-control" placeholder="E.g., 77">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <button class="btn-custom btn-primary-custom btn-auto" id="saveTotalAttBtn" style="padding: 10px 15px;">Save Total Days</button>
+        <!-- MAIN WORKSPACE -->
+        <main class="app-main">
+            <!-- STICKY HEADER -->
+            <header class="app-header">
+                <div class="header-title-box">
+                    <div class="header-logo d-lg-none"><i class="bi bi-mortarboard-fill"></i></div>
+                    <div class="header-text">
+                        <h1 id="displayMadrasaName">Madrasa Name</h1>
+                        <p>Class: <span id="displayClassName">XX</span></p>
                     </div>
                 </div>
-            </div>
+                <div class="d-flex gap-2">
+                    <button class="icon-btn" id="themeToggle" title="Toggle Theme"><i class="bi bi-moon-fill"></i></button>
+                    <button class="icon-btn text-danger" id="logoutBtn" title="Logout"><i class="bi bi-box-arrow-right"></i></button>
+                </div>
+            </header>
 
-            <div class="grid-2">
-                <div class="card">
-                    <h3>Manual Mark Entry</h3>
-                    <div class="form-group"><label>Select Student</label><select id="markStudentSelect" class="form-control"><option value="">-- Select Student --</option></select></div>
+            <div class="content-container">
+                <!-- =======================================
+                     TAB 1: STUDENTS / DASHBOARD HOME
+                     ======================================= -->
+                <div id="tab-students" class="tab-content active">
                     
-                    <div class="form-group">
-                        <label>Days Present (ഹാജരായ ദിവസങ്ങൾ)</label>
-                        <input type="number" id="attendanceInput" class="form-control" placeholder="Present">
-                    </div>
-                    
-                    <div id="dynamicSubjectInputs"></div>
-                    <button class="btn-custom btn-primary-custom" id="saveMarksBtn" style="margin-top: 15px;">Save Marks</button>
-                </div>
+                    <div class="card" style="background: transparent; border: none; box-shadow: none; padding: 0;">
+                        <h2 style="font-size: 22px; margin-bottom: 5px;">Good Evening, Teacher 👋</h2>
+                        <p style="color: var(--text-muted); margin-bottom: 20px;">Manage your class, marks, and results efficiently.</p>
+                        
+                        <div class="grid-4 mb-4">
+                            <div class="stat-card"><i class="bi bi-people-fill fs-4"></i><h3>Manage</h3><p class="m-0 opacity-75 small">Students Info</p></div>
+                            <div class="stat-card" style="background: linear-gradient(145deg, #0284c7, #0369a1);"><i class="bi bi-journal-text fs-4"></i><h3>Enter</h3><p class="m-0 opacity-75 small">Exam Marks</p></div>
+                            <div class="stat-card" style="background: linear-gradient(145deg, #10b981, #059669);"><i class="bi bi-trophy-fill fs-4"></i><h3>Generate</h3><p class="m-0 opacity-75 small">Results & PDFs</p></div>
+                            <div class="stat-card" style="background: linear-gradient(145deg, #f59e0b, #d97706);"><i class="bi bi-capslock-fill fs-4"></i><h3>Promote</h3><p class="m-0 opacity-75 small">Next Year</p></div>
+                        </div>
 
-                <div style="display: flex; flex-direction: column; gap: 20px;">
-                    <div class="card" style="margin-bottom: 0;">
-                        <h3>Bulk Upload Marks (Excel)</h3>
-                        <div class="form-group"><label>Upload Marks Excel File</label><input type="file" id="marksExcel" class="form-control" accept=".xlsx, .xls"></div>
-                        <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                            <strong>Columns Required:</strong> AdmissionNo, Attendance, [Subject 1], [Subject 2]... <br>
-                        </p>
-                        <button class="btn-custom btn-primary-custom" id="uploadMarksExcelBtn">Upload Marks</button>
+                        <div class="grid-4 mb-4">
+                            <div class="quick-action-btn" onclick="document.querySelector('[data-tab=tab-marks]').click()"><i class="bi bi-pencil-square"></i> Enter Marks</div>
+                            <div class="quick-action-btn" onclick="document.querySelector('[data-tab=tab-results]').click()"><i class="bi bi-file-earmark-pdf"></i> Marklists</div>
+                            <div class="quick-action-btn" onclick="document.querySelector('[data-tab=tab-results]').click()"><i class="bi bi-clipboard2-data"></i> Progress Report</div>
+                            <div class="quick-action-btn" onclick="document.querySelector('[data-tab=tab-upgrade]').click()"><i class="bi bi-arrow-up-circle"></i> Promote</div>
+                        </div>
                     </div>
 
-                    <div class="card" style="background-color: #fef9c3; border: 1px solid #fef08a; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 0;">
-                        <h3 style="text-align: center; color: #854d0e; border: none; font-size: 16px; font-weight: bold; margin-bottom: 20px; line-height: 1.5; padding-bottom: 0;">
-                            തെറ്റായ എക്സാമിൽ നൽകിയ <br> മാർക്കുകൾ മാറ്റാൻ (Transfer Marks)
-                        </h3>
-                        <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                            <div style="flex: 1; min-width: 140px;">
-                                <select id="transferFromTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
-                                    <option value="" disabled selected>From (മാറ്റേണ്ടത്)</option>
-                                    <option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
-                                </select>
+                    <!-- Add Student Form -->
+                    <div class="card">
+                        <h3><i class="bi bi-person-plus-fill text-primary"></i> Add New Student</h3>
+                        <div class="grid-3">
+                            <div class="form-group"><label>Name *</label><input type="text" id="studentName" class="form-control" placeholder="Full Name"></div>
+                            <div class="form-group"><label>Admission No *</label><input type="text" id="admissionNo" class="form-control" placeholder="Ad. No"></div>
+                            <div class="form-group"><label>Gender *</label><select id="gender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select></div>
+                            <div class="form-group"><label>Date of Birth</label><input type="date" id="dob" class="form-control"></div>
+                            <div class="form-group"><label>Father's Name</label><input type="text" id="fatherName" class="form-control" placeholder="Father's Name"></div>
+                            <div class="form-group"><label>Place / Address</label><input type="text" id="place" class="form-control" placeholder="Place"></div>
+                            <div class="form-group"><label>Contact No</label><input type="text" id="contactNo" class="form-control" placeholder="Phone Number"></div>
+                            <div class="form-group"><label>WhatsApp No</label><input type="text" id="whatsappNo" class="form-control" placeholder="WhatsApp Number"></div>
+                        </div>
+                        <div class="text-end mt-2"><button class="btn-custom btn-primary-custom btn-auto" id="addStudentBtn"><i class="bi bi-check2-circle"></i> Save Student</button></div>
+                        
+                        <!-- EXCEL FORMAT INSTRUCTIONS -->
+                        <div class="excel-box mt-4">
+                            <i class="bi bi-file-earmark-excel text-success" style="font-size: 32px;"></i>
+                            <h5 class="mt-2 mb-2">Upload Excel File</h5>
+                            <input type="file" id="studentExcel" class="form-control mx-auto mb-3" style="max-width: 400px;" accept=".xlsx, .xls">
+                            
+                            <p style="font-size: 13px; color: #e74c3c; font-weight: bold; margin-bottom: 15px; line-height: 1.5;"> 
+                                നിർബന്ധമായും വേണ്ട കോളങ്ങൾ: Name, AdmissionNo <br> 
+                                <span style="color: #64748b; font-weight: normal; font-size: 12px;">(മറ്റു വിവരങ്ങൾ നൽകണമെങ്കിൽ എക്സൽ കോളത്തിന്റെ പേര് കൃത്യമായി ഇങ്ങനെ തന്നെ നൽകുക: Gender, DOB, FatherName, Place, ContactNo, WhatsappNo)</span> 
+                            </p>
+                            
+                            <button class="btn-custom btn-success btn-auto" id="uploadStudentExcelBtn"><i class="bi bi-upload"></i> Upload Data</button>
+                        </div>
+                    </div>
+
+                    <!-- Registered Students Table -->
+                    <div class="card">
+                        <h3>
+                            <div><i class="bi bi-people-fill text-primary"></i> Registered Students</div>
+                            <div class="d-flex gap-2">
+                                <button class="btn-custom btn-info-custom btn-small" id="downloadStudentListBtn"><i class="bi bi-file-pdf"></i> List PDF</button>
+                                <button class="btn-custom btn-danger-custom btn-small" id="deleteAllStudentsBtn"><i class="bi bi-trash3"></i> Delete All</button>
                             </div>
-                            <div style="flex: 1; min-width: 140px;">
-                                <select id="transferToTerm" class="form-control" style="background: white; border-color: #e2e8f0; font-size: 14px;">
-                                    <option value="" disabled selected>To (ശരിയായത്)</option>
-                                    <option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
-                                </select>
+                        </h3>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th><th>Action</th></tr></thead>
+                                <tbody id="studentsTableBody"><tr><td colspan="9" class="text-center p-4">Loading data...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- =======================================
+                     TAB 2: ENTER MARKS
+                     ======================================= -->
+                <div id="tab-marks" class="tab-content">
+                    <div class="grid-2">
+                        <!-- Exam Setup -->
+                        <div class="card">
+                            <h3><i class="bi bi-gear-fill text-primary"></i> Exam Setup</h3>
+                            <div class="form-group"><label>Exam Term</label><select id="examTerm" class="form-control"><option>Monthly Test</option><option>Quarterly Exam</option><option>Half Yearly Exam</option><option>Annual Exam</option></select></div>
+                            <div class="form-group"><label>Total Working Days</label><input type="number" id="classTotalAttendance" class="form-control" placeholder="E.g., 77"></div>
+                            <button class="btn-custom btn-primary-custom w-100" id="saveTotalAttBtn"><i class="bi bi-save"></i> Save Settings</button>
+                        </div>
+                        
+                        <!-- Subjects -->
+                        <div class="card">
+                            <h3><i class="bi bi-book-half text-primary"></i> Manage Subjects</h3>
+                            <div class="d-flex gap-2 align-items-end flex-wrap">
+                                <div class="form-group mb-0 flex-grow-1"><label>Subject</label><input type="text" id="newSubjectName" class="form-control" placeholder="Name"></div>
+                                <div class="form-group mb-0" style="width:80px;"><label>Max</label><input type="number" id="newSubjectMaxMark" class="form-control" placeholder="100"></div>
+                                <div class="form-group mb-0" style="width:80px;"><label>Pass</label><input type="number" id="newSubjectPassMark" class="form-control" placeholder="35"></div>
+                                <button class="btn-custom btn-primary-custom mb-0" id="addSubjectBtn" style="height:45px;"><i class="bi bi-plus-lg"></i></button>
+                            </div>
+                            <div id="subjectTagsContainer" class="mt-3"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <!-- Manual Marks -->
+                        <div class="card">
+                            <h3><i class="bi bi-pencil-square text-primary"></i> Enter Marks</h3>
+                            <div class="form-group"><label>Select Student</label><select id="markStudentSelect" class="form-control fw-bold"><option value="">-- Choose Student --</option></select></div>
+                            <div class="form-group p-3 border rounded mb-3" style="background:var(--bg-app);"><label class="text-primary"><i class="bi bi-calendar-check"></i> Days Present</label><input type="number" id="attendanceInput" class="form-control" placeholder="e.g. 65"></div>
+                            
+                            <div id="dynamicSubjectInputs"></div>
+
+                            <button class="btn-custom btn-primary-custom w-100 mt-3" id="saveMarksBtn"><i class="bi bi-check-circle"></i> Save Marks</button>
+                        </div>
+                        
+                        <!-- Bulk & Transfer -->
+                        <div class="d-flex flex-column gap-3">
+                            <div class="card excel-box text-start mb-0">
+                                <h4><i class="bi bi-file-earmark-spreadsheet text-success"></i> Bulk Upload Marks</h4>
+                                <p class="text-muted small">Columns: AdmissionNo, Attendance, [Subject 1]...</p>
+                                <input type="file" id="marksExcel" class="form-control mb-3" accept=".xlsx, .xls">
+                                <button class="btn-custom btn-success w-100" id="uploadMarksExcelBtn"><i class="bi bi-upload"></i> Upload</button>
+                            </div>
+
+                            <div class="card mb-0" style="background: linear-gradient(to right bottom, #FFFBEB, #FEF3C7); border: 1px solid #FDE68A;">
+                                <h3 class="text-warning border-0"><i class="bi bi-arrow-left-right"></i> Transfer Marks</h3>
+                                <div class="grid-2 mb-3">
+                                    <div class="form-group mb-0"><label>From (Wrong Term)</label><select id="transferFromTerm" class="form-control"><option value="" disabled selected>Select</option><option>Monthly Test</option><option>Quarterly Exam</option><option>Half Yearly Exam</option><option>Annual Exam</option></select></div>
+                                    <div class="form-group mb-0"><label>To (Correct Term)</label><select id="transferToTerm" class="form-control"><option value="" disabled selected>Select</option><option>Monthly Test</option><option>Quarterly Exam</option><option>Half Yearly Exam</option><option>Annual Exam</option></select></div>
+                                </div>
+                                <button id="moveMarksBtn" class="btn-custom btn-warning-custom w-100"><i class="bi bi-arrow-right-circle"></i> Move Marks</button>
                             </div>
                         </div>
-                        <button id="moveMarksBtn" class="btn-custom" style="background-color: #f59e0b; color: white; width: 100%; font-size: 16px; font-weight: bold; padding: 12px; border-radius: 8px; border: none; cursor: pointer;">Move Marks</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="tab-results" class="tab-content">
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
-                    <h3 style="border:none; margin:0; padding:0;">Results Overview</h3>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="btn-custom btn-auto btn-small" id="copyResultLinkBtn" style="background-color: #10b981; color: white;">🔗 Copy Public Result Link</button>
-                        <button class="btn-custom btn-primary-custom btn-auto btn-small" id="downloadDetailedPdfBtn">Download Marklist</button>
-                        <button class="btn-custom btn-info-custom btn-auto btn-small" id="downloadNoticeBoardPdfBtn">Download Notice Board</button>
-                        <button class="btn-custom btn-warning-custom btn-auto btn-small" id="downloadDeskLabelsBtn">Download Desk Labels</button>
-                        <button class="btn-custom btn-auto btn-small" id="downloadProgressReportBtn" style="background-color: #0f5132; color: white;">Download Progress Report (A4)</button>
                     </div>
                 </div>
                 
-                <div class="form-group" style="max-width: 300px;">
-                    <label>View Results For Term</label>
-                    <select id="viewResultTerm" class="form-control">
-                        <option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
-                    </select>
-                </div>
-                
-                <div class="table-responsive mt-3">
-                    <table class="data-table">
-                        <thead id="screenResultHead"></thead>
-                        <tbody id="screenResultBody"><tr><td colspan="100%" style="text-align: center; padding:20px;">Loading data...</td></tr></tbody>
-                    </table>
-                </div>
-                
-                <div class="mt-4 text-end">
-                    <button class="btn-custom btn-danger-custom btn-auto btn-small" id="deleteAllMarksTermBtn">Delete ALL Marks for this Term</button>
-                </div>
-            </div>
+                <!-- =======================================
+                     TAB 3: RESULTS & DOWNLOADS
+                     ======================================= -->
+                <div id="tab-results" class="tab-content">
+                    <div class="card">
+                        <h3><i class="bi bi-printer-fill text-primary"></i> Downloads & Actions</h3>
+                        <div class="grid-3">
+                            <button class="quick-action-btn" id="copyResultLinkBtn" style="color:var(--success);border-color:var(--success);"><i class="bi bi-link-45deg"></i> Copy Public Link</button>
+                            <button class="quick-action-btn" id="downloadDetailedPdfBtn"><i class="bi bi-file-pdf"></i> Marklist (PDF)</button>
+                            <button class="quick-action-btn" id="downloadProgressReportBtn" style="color:var(--primary);border-color:var(--primary);"><i class="bi bi-clipboard-data"></i> Progress Report</button>
+                            <button class="quick-action-btn" id="downloadNoticeBoardPdfBtn"><i class="bi bi-easel2"></i> Notice Board</button>
+                            <button class="quick-action-btn" id="downloadDeskLabelsBtn"><i class="bi bi-tags"></i> Desk Labels</button>
+                        </div>
+                    </div>
 
-            <div class="card" style="margin-top: 20px; border-top: 4px solid var(--primary-dark);">
-                <h3 style="border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">
-                    Result Publish Management 
-                    <span style="font-size: 11px; color: #10b981; font-weight: normal;">(1-Read Auto-Cache Enabled)</span>
-                </h3>
-                <p style="font-size: 13px; color: #64748b; margin-bottom: 20px;">
-                    Publishing will automatically create a single JSON cache file for students, enabling ultra-fast 1-Read result checking.
-                </p>
-                
-                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
-                    <div style="flex: 1; min-width: 200px;">
-                        <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Select Term to Manage</label>
-                        <select id="publishTerm" class="form-control">
-                            <option value="" disabled selected>-- Select Exam --</option><option value="Monthly Test">Monthly Test</option><option value="Quarterly Exam">Quarterly Exam</option><option value="Half Yearly Exam">Half Yearly Exam</option><option value="Annual Exam">Annual Exam</option>
-                        </select>
+                    <!-- Results Table (Scrollable with Vertical Headers) -->
+                    <div class="card">
+                        <h3>
+                            <div><i class="bi bi-bar-chart-fill text-primary"></i> Exam Results</div>
+                            <select id="viewResultTerm" class="form-control form-control-sm text-primary fw-bold" style="width:200px;"><option>Monthly Test</option><option>Quarterly Exam</option><option>Half Yearly Exam</option><option>Annual Exam</option></select>
+                        </h3>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead id="screenResultHead"></thead>
+                                <tbody id="screenResultBody"><tr><td colspan="100%" class="text-center p-4">Loading data...</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="text-end mt-3"><button class="btn-custom btn-danger-custom btn-small" id="deleteAllMarksTermBtn"><i class="bi bi-trash"></i> Delete Term Marks</button></div>
                     </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Action (Status)</label>
-                        <select id="publishStatus" class="form-control"><option value="published">Publish (Visible to Students)</option><option value="hidden">Hide (Keep Private)</option></select>
-                    </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <label style="font-size: 12px; font-weight: bold; color: #475569; display: block; margin-bottom: 5px;">Auto-Publish Date & Time</label>
-                        <input type="datetime-local" id="publishDateTime" class="form-control">
+
+                    <!-- Publish Settings -->
+                    <div class="card" style="background:var(--bg-app);">
+                        <h3><i class="bi bi-globe2 text-info"></i> Publish Management</h3>
+                        <div class="grid-3 mb-3">
+                            <div class="form-group mb-0"><label>Target Exam</label><select id="publishTerm" class="form-control"><option value="" disabled selected>-- Select --</option><option>Monthly Test</option><option>Quarterly Exam</option><option>Half Yearly Exam</option><option>Annual Exam</option></select></div>
+                            <div class="form-group mb-0"><label>Visibility</label><select id="publishStatus" class="form-control"><option value="published">🟢 Published</option><option value="hidden">🔴 Hidden</option></select></div>
+                            <div class="form-group mb-0"><label>Publish Time</label><input type="datetime-local" id="publishDateTime" class="form-control"></div>
+                        </div>
+                        <p id="publishStatusText" class="text-center fw-bold small"></p>
+                        <button id="savePublishSettingsBtn" class="btn-custom btn-info-custom w-100"><i class="bi bi-cloud-sync"></i> Save & Sync Database</button>
                     </div>
                 </div>
-                
-                <p id="publishStatusText" style="font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 15px;"></p>
-                <button id="savePublishSettingsBtn" class="btn-custom btn-primary-custom" style="width: 100%; font-size: 15px; padding: 12px; background-color: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">Save & Sync Cache</button>
-            </div>
-        </div>
 
-        <div id="tab-upgrade" class="tab-content">
-            <div class="card" style="border-top: 4px solid #f59e0b;">
-                <h3>Upgrade Students to Next Class</h3>
-                <div class="form-group" style="max-width: 300px;"><label>Select Target Class</label><select id="upgradeTargetClass" class="form-control"><option value="1">Class 1</option><option value="2">Class 2</option><option value="3">Class 3</option><option value="4">Class 4</option><option value="5">Class 5</option><option value="6">Class 6</option><option value="7">Class 7</option><option value="8">Class 8</option><option value="9">Class 9</option><option value="10">Class 10</option><option value="11">Class 11</option><option value="12">Class 12</option></select></div>
-                <div class="table-responsive mt-3"><table class="data-table"><thead><tr><th><input type="checkbox" id="selectAllUpgrade"> All</th><th>Ad.No</th><th>Name</th><th>Gender</th></tr></thead><tbody id="upgradeTableBody"><tr><td colspan="4" style="text-align: center;">Loading...</td></tr></tbody></table></div>
-                <button class="btn-custom btn-warning-custom mt-3" id="processUpgradeBtn">Upgrade Selected Students</button>
+                <!-- =======================================
+                     TAB 4: UPGRADE / PROMOTE
+                     ======================================= -->
+                <div id="tab-upgrade" class="tab-content">
+                    <div class="card" style="border-top: 4px solid var(--warning);">
+                        <h3><i class="bi bi-capslock-fill text-warning"></i> Promote Students</h3>
+                        <div class="form-group" style="max-width:300px;"><label>Target Class</label>
+                            <!-- അഡ്മിൻ നൽകിയ യഥാർത്ഥ ക്ലാസുകൾ മാത്രം ഇവിടെ വരും -->
+                            <select id="upgradeTargetClass" class="form-control border-warning">
+                                <option value="">-- Select Target Class --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="table-responsive mt-3">
+                            <table class="data-table">
+                                <thead><tr><th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllUpgrade"></th><th>Ad.No</th><th>Name</th><th>Gender</th></tr></thead>
+                                <tbody id="upgradeTableBody"><tr><td colspan="4" class="text-center p-3">Loading...</td></tr></tbody>
+                            </table>
+                        </div>
+                        <button class="btn-custom btn-warning-custom w-100 mt-4 py-3 fs-6" id="processUpgradeBtn"><i class="bi bi-stars"></i> Promote Selected Students</button>
+                    </div>
+                </div>
             </div>
-        </div>
+        </main>
     </div>
 
-    <!-- Modals & PDF Wrappers -->
+    <!-- MODAL -->
     <div class="modal fade" id="editStudentModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit Student</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-dialog">
+        <div class="modal-content border-0 rounded-4">
+          <div class="modal-header border-bottom"><h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Student</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
           <div class="modal-body">
             <input type="hidden" id="editStudentId">
-            <div class="form-group"><label>Name *</label><input type="text" id="editName" class="form-control"></div>
-            <div class="form-group"><label>Admission No *</label><input type="text" id="editAdNo" class="form-control"></div>
-            <div class="form-group"><label>Gender *</label><select id="editGender" class="form-control"><option value="Male">Boy (Male)</option><option value="Female">Girl (Female)</option></select></div>
-            <div class="form-group"><label>Date of Birth</label><input type="date" id="editDob" class="form-control"></div>
-            <div class="form-group"><label>Father's Name</label><input type="text" id="editFatherName" class="form-control"></div>
-            <div class="form-group"><label>Place</label><input type="text" id="editPlace" class="form-control"></div>
-            <div class="form-group"><label>Contact No</label><input type="text" id="editContactNo" class="form-control"></div>
-            <div class="form-group"><label>WhatsApp No</label><input type="text" id="editWhatsappNo" class="form-control"></div>
+            <div class="grid-2">
+                <div class="form-group"><label>Name *</label><input type="text" id="editName" class="form-control"></div>
+                <div class="form-group"><label>Admission No *</label><input type="text" id="editAdNo" class="form-control"></div>
+                <div class="form-group"><label>Gender *</label><select id="editGender" class="form-control"><option value="Male">Boy</option><option value="Female">Girl</option></select></div>
+                <div class="form-group"><label>Date of Birth</label><input type="date" id="editDob" class="form-control"></div>
+                <div class="form-group"><label>Father's Name</label><input type="text" id="editFatherName" class="form-control"></div>
+                <div class="form-group"><label>Place</label><input type="text" id="editPlace" class="form-control"></div>
+                <div class="form-group"><label>Contact No</label><input type="text" id="editContactNo" class="form-control"></div>
+                <div class="form-group"><label>WhatsApp No</label><input type="text" id="editWhatsappNo" class="form-control"></div>
+            </div>
           </div>
-          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="button" class="btn btn-success" id="saveEditStudentBtn">Save Changes</button></div>
-      </div></div>
+          <div class="modal-footer border-top">
+              <button type="button" class="btn-custom border" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn-custom btn-primary-custom" id="saveEditStudentBtn"><i class="bi bi-check2"></i> Save Changes</button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="pdf-wrapper" id="pdfDetailedWrapper"><div id="pdfExportArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName1">MADRASA</h1><h2 id="pdfExamTitle1">EXAM</h2></div><table class="pdf-table"><thead id="pdfThead1"></thead><tbody id="pdfTbody1"></tbody></table><div class="pdf-summary-container"><table class="pdf-summary-box"><thead><tr><th colspan="3">TOTAL STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfTot1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PASSED STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPass1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PERCENTAGE</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPerc1"><td>0%</td><td>0%</td><td>0%</td></tr></tbody></table></div><div class="pdf-footer"><div class="pdf-footer-left">MUALLIM NAME</div><div class="pdf-footer-right" id="pdfTeacherName1">TEACHER</div></div></div></div>
+    <!-- HIDDEN PDF WRAPPERS -->
+    <div class="pdf-wrapper" id="pdfDetailedWrapper"><div id="pdfExportArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName1">MADRASA</h1><h2 id="pdfExamTitle1">EXAM</h2></div><table class="pdf-table"><thead id="pdfThead1"></thead><tbody id="pdfTbody1"></tbody></table><div class="pdf-summary-container"><table class="pdf-summary-box"><thead><tr><th colspan="3">TOTAL STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfTot1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PASSED STUDENTS</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPass1"><td>0</td><td>0</td><td>0</td></tr></tbody></table><table class="pdf-summary-box"><thead><tr><th colspan="3">PERCENTAGE</th></tr><tr><th>B</th><th>G</th><th>TOTAL</th></tr></thead><tbody><tr id="pdfPerc1"><td>0%</td><td>0%</td><td>0%</td></tr></tbody></table></div><div class="pdf-footer"><div class="pdf-footer-left">MUALLIM NAME</div><div class="pdf-footer-right" id="pdfTeacherName1">TEACHER</div></div></div></div> <div class="pdf-wrapper" id="pdfNoticeBoardWrapper"><div id="pdfNoticeBoardArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName2">MADRASA</h1><h2 id="pdfExamTitle2">EXAM</h2></div><table class="nb-table"><thead id="pdfThead2"></thead><tbody id="pdfTbody2"></tbody></table></div></div> <div class="pdf-wrapper" id="pdfDeskLabelsWrapper"><div id="pdfDeskLabelsArea"><div class="desk-labels-grid" id="deskLabelsGrid"></div></div></div> <div class="pdf-wrapper" id="pdfStudentListWrapper"><div id="pdfStudentListArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName4">MADRASA</h1><h2 id="pdfClassTitle4">CLASS STUDENTS</h2></div><table class="nb-table"><thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead><tbody id="pdfStudentListBody"></tbody></table></div></div> <div class="pdf-wrapper" id="pdfProgressReportWrapper"> <div id="prPrintContainer" class="pr-a4-landscape"></div> </div>
 
-    <div class="pdf-wrapper" id="pdfNoticeBoardWrapper"><div id="pdfNoticeBoardArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName2">MADRASA</h1><h2 id="pdfExamTitle2">EXAM</h2></div><table class="nb-table"><thead id="pdfThead2"></thead><tbody id="pdfTbody2"></tbody></table></div></div>
-
-    <div class="pdf-wrapper" id="pdfDeskLabelsWrapper"><div id="pdfDeskLabelsArea"><div class="desk-labels-grid" id="deskLabelsGrid"></div></div></div>
-
-    <div class="pdf-wrapper" id="pdfStudentListWrapper"><div id="pdfStudentListArea" class="pdf-area-standard"><div class="pdf-header"><h1 id="pdfMadrasaName4">MADRASA</h1><h2 id="pdfClassTitle4">CLASS STUDENTS</h2></div><table class="nb-table"><thead><tr><th>Ad.No</th><th>Name</th><th>Gender</th><th>Father's Name</th><th>DOB</th><th>Contact No</th><th>WhatsApp</th><th>Place</th></tr></thead><tbody id="pdfStudentListBody"></tbody></table></div></div>
-
-    <div class="pdf-wrapper" id="pdfProgressReportWrapper">
-        <div id="prPrintContainer" class="pr-a4-landscape"></div>
-    </div>
-
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        if(localStorage.getItem('theme') === 'dark') { document.body.classList.add('dark-theme'); themeToggle.innerHTML = '<i class="bi bi-sun-fill"></i>'; }
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            localStorage.setItem('theme', document.body.classList.contains('dark-theme') ? 'dark' : 'light');
+            themeToggle.innerHTML = document.body.classList.contains('dark-theme') ? '<i class="bi bi-sun-fill"></i>' : '<i class="bi bi-moon-fill"></i>';
+        });
+    </script>
     <script type="module" src="teacher_dashboard.js"></script>
 </body>
 </html>
