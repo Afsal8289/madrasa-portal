@@ -237,7 +237,11 @@
         
         /* 🛠️ BEAUTIFUL PROGRESS REPORT CSS (Dynamic values injected via JS) */
         .pr-a4-landscape { width: 297mm; height: 210mm; background: white; display: flex; box-sizing: border-box; padding: 10mm; gap: 10mm; font-family: 'Times New Roman', serif; }
-        .pr-card { flex: 1; border: 3px double #0f5132; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; position: relative; background: #fffaf0; }
+        
+        /* മാറ്റം വരുത്തിയ വരി താഴെ നൽകുന്നു */
+        .pr-card { flex: 1; max-width: calc(50% - 5mm); border: 3px double #0f5132; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; position: relative; background: #fffaf0; }
+        /* മാറ്റം അവസാനിച്ചു */
+
         .pr-card::before { content: ""; position: absolute; top: 5px; left: 5px; right: 5px; bottom: 5px; border: 1px solid #d4af37; pointer-events: none; border-radius: 4px; }
         .pr-header { text-align: center; }
         .pr-inst-name { font-weight: bold; color: #0f5132; margin: 0; text-transform: uppercase; letter-spacing: 1px;}
