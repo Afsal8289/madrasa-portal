@@ -958,4 +958,173 @@ document.getElementById("processUpgradeBtn")?.addEventListener("click", async ()
     } catch (error) { console.error("Upgrade Error:", error); alert("An error occurred while upgrading."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
 });
 
+// ==========================================
+// EXCEL UPLOAD LOGIC (STUDENTS & MARKS)
+// ==========================================
+
+// 1. Upload Students Excel
+document.getElementById("uploadStudentExcelBtn")?.addEventListener("click", async () => {
+    const fileInput = document.getElementById("studentExcel");
+    if (!fileInput.files.length) return alert("ദയവായി ഒരു എക്സൽ ഫയൽ തിരഞ്ഞെടുക്കുക.");
+
+    const btn = document.getElementById("uploadStudentExcelBtn");
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Uploading..."; btn.disabled = true;
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) throw new Error("Excel sheet is empty");
+
+            let successCount = 0;
+            for (const row of jsonData) {
+                const name = row["Name"];
+                const admissionNo = row["AdmissionNo"];
+                
+                if (!name || !admissionNo) continue; // Name ഉം AdmissionNo ഉം നിർബന്ധമാണ്
+
+                // നിലവിൽ ഈ അഡ്മിഷൻ നമ്പർ ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+                const exists = Object.values(state.studentsMap).some(s => String(s.admissionNo) === String(admissionNo));
+                if (exists) continue;
+
+                const newStudentData = {
+                    name: String(name).trim(),
+                    admissionNo: String(admissionNo).trim(),
+                    gender: row["Gender"] ? String(row["Gender"]).trim() : "Male",
+                    dob: row["DOB"] ? String(row["DOB"]).trim() : "",
+                    fatherName: row["FatherName"] ? String(row["FatherName"]).trim() : "",
+                    place: row["Place"] ? String(row["Place"]).trim() : "",
+                    contactNo: row["ContactNo"] ? String(row["ContactNo"]).trim() : "",
+                    whatsappNo: row["WhatsappNo"] ? String(row["WhatsappNo"]).trim() : "",
+                    className: state.assignedClass,
+                    madrasaUid: state.madrasaUid
+                };
+                
+                await StudentService.addNewStudent(newStudentData);
+                successCount++;
+            }
+
+            localStorage.removeItem(`cache_students_${state.assignedClass}`);
+            await triggerCacheUpdate();
+            await loadStudents();
+            alert(`വിജയകരമായി അപ്‌ലോഡ് ചെയ്തു! പുതിയതായി ${successCount} കുട്ടികളെ ചേർത്തു.`);
+            fileInput.value = "";
+        } catch (error) {
+            console.error(error);
+            alert("എക്സൽ ഫയൽ വായിക്കുന്നതിൽ പ്രശ്നമുണ്ട്. ഫോർമാറ്റ് ശരിയാണോ എന്ന് പരിശോധിക്കുക.");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+// 2. Upload Marks Excel
+document.getElementById("uploadMarksExcelBtn")?.addEventListener("click", async () => {
+    const fileInput = document.getElementById("marksExcel");
+    const term = document.getElementById("examTerm")?.value;
+    
+    if (!fileInput.files.length) return alert("ദയവായി മാർക്ക് അടങ്ങിയ എക്സൽ ഫയൽ തിരഞ്ഞെടുക്കുക.");
+    if (!term) return alert("Exam Term തിരഞ്ഞെടുത്തിട്ടില്ല.");
+
+    const btn = document.getElementById("uploadMarksExcelBtn");
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "Uploading Marks..."; btn.disabled = true;
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) throw new Error("Excel sheet is empty");
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const row of jsonData) {
+                const adNo = row["AdmissionNo"];
+                if (!adNo) continue;
+
+                const student = Object.values(state.studentsMap).find(s => String(s.admissionNo) === String(adNo));
+                if (!student) { errorCount++; continue; }
+
+                let marksData = {};
+                let totalObtained = 0;
+                let totalMaxPossible = 0;
+                let isPassed = true;
+
+                state.classSubjects.forEach(sub => {
+                    totalMaxPossible += sub.maxMark;
+                    let val = row[sub.name];
+                    
+                    if (val === undefined || val === null || val === "") {
+                        marksData[sub.name] = "";
+                    } else if (String(val).toUpperCase() === "A") {
+                        marksData[sub.name] = "A";
+                        isPassed = false;
+                    } else {
+                        const num = Number(val);
+                        if (!isNaN(num)) {
+                            marksData[sub.name] = num > sub.maxMark ? sub.maxMark : num; // മാക്സിമം മാർക്കിനെക്കാൾ കൂടിയാൽ അത് കുറയ്ക്കുന്നു
+                            totalObtained += marksData[sub.name];
+                            if (marksData[sub.name] < sub.passMark) isPassed = false;
+                        } else {
+                            marksData[sub.name] = "";
+                        }
+                    }
+                });
+
+                const attendance = row["Attendance"] !== undefined ? String(row["Attendance"]) : "";
+                const docId = `${student.id}_${term.replace(/\s+/g, '')}`;
+                const percentage = totalMaxPossible > 0 ? (totalObtained / totalMaxPossible) * 100 : 0;
+
+                const finalData = {
+                    studentId: student.id,
+                    studentName: student.name,
+                    madrasaUid: state.madrasaUid,
+                    className: state.assignedClass,
+                    term,
+                    marks: marksData,
+                    attendance: attendance,
+                    totalMarks: totalObtained,
+                    maxMarkTotal: totalMaxPossible,
+                    subjectConfig: state.classSubjects,
+                    percentage: percentage,
+                    grade: utils.getGrade(percentage, isPassed),
+                    status: isPassed ? "Passed" : "Failed"
+                };
+
+                await MarkService.saveStudentMarks(docId, finalData, term, state.assignedClass);
+                successCount++;
+            }
+
+            await triggerCacheUpdate();
+            await syncResultCache(term);
+            loadResults();
+            alert(`മാർക്കുകൾ വിജയകരമായി അപ്‌ലോഡ് ചെയ്തു!\nസേവ് ചെയ്തവ: ${successCount}\nകുട്ടികളെ കണ്ടെത്താൻ കഴിയാത്തവ: ${errorCount}`);
+            fileInput.value = "";
+        } catch (error) {
+            console.error(error);
+            alert("എക്സൽ ഫയൽ വായിക്കുന്നതിൽ പ്രശ്നമുണ്ട്. വിഷയങ്ങളുടെ പേരുകൾ (Headers) കൃത്യമാണോ എന്ന് പരിശോധിക്കുക.");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+});
+
 checkAuth(async (user) => { state.teacherUid = user.uid; setupTabs(); await loadTeacherData(); });
